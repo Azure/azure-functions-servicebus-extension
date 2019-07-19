@@ -34,6 +34,13 @@ namespace Microsoft.Azure.WebJobs
         /// <summary>
         /// Initializes a new instance of the <see cref="ServiceBusTriggerAttribute"/> class.
         /// </summary>
+        public ServiceBusTriggerAttribute()
+        {
+        }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="ServiceBusTriggerAttribute"/> class.
+        /// </summary>
         /// <param name="queueName">The name of the queue to which to bind.</param>
         public ServiceBusTriggerAttribute(string queueName)
         {
@@ -82,6 +89,11 @@ namespace Microsoft.Azure.WebJobs
         {
             get { return _subscriptionName; }
         }
+
+        /// <summary>
+        /// Gets or sets a value indicating whether the sessions are enabled.
+        /// </summary>
+        public bool IsSessionsEnabled { get; set; }
 
         private string DebuggerDisplay
         {

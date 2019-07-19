@@ -15,27 +15,40 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
     internal sealed class ServiceBusListener : IListener
     {
         private readonly MessagingProvider _messagingProvider;
-        private readonly string _entityPath;
         private readonly ServiceBusTriggerExecutor _triggerExecutor;
         private readonly CancellationTokenSource _cancellationTokenSource;
         private readonly MessageProcessor _messageProcessor;
         private readonly ServiceBusAccount _serviceBusAccount;
-
+        private readonly ServiceBusOptions _serviceBusOptions;
         private MessageReceiver _receiver;
+        private ClientEntity _clientEntity;
         private bool _disposed;
         private bool _started;
 
-        public ServiceBusListener(string entityPath, ServiceBusTriggerExecutor triggerExecutor, ServiceBusOptions config, ServiceBusAccount serviceBusAccount, MessagingProvider messagingProvider)
+        private IMessageSession _messageSession;
+        private SessionMessageProcessor _sessionMessageProcessor;
+
+        public ServiceBusListener(ServiceBusTriggerExecutor triggerExecutor, ServiceBusOptions config, ServiceBusAccount serviceBusAccount, MessagingProvider messagingProvider)
         {
-            _entityPath = entityPath;
             _triggerExecutor = triggerExecutor;
             _cancellationTokenSource = new CancellationTokenSource();
             _messagingProvider = messagingProvider;
             _serviceBusAccount = serviceBusAccount;
-            _messageProcessor = messagingProvider.CreateMessageProcessor(entityPath, _serviceBusAccount.ConnectionString);
+
+            if (serviceBusAccount.IsSessionsEnabled)
+            {
+                _sessionMessageProcessor = _messagingProvider.CreateSessionMessageProcessor(_serviceBusAccount.EntityPath, _serviceBusAccount.ConnectionString);
+            }
+            else
+            {
+                _messageProcessor = _messagingProvider.CreateMessageProcessor(_serviceBusAccount.EntityPath, _serviceBusAccount.ConnectionString);
+            }
+            _serviceBusOptions = config;
         }
 
         internal MessageReceiver Receiver => _receiver;
+
+        internal IMessageSession MessageSession => _messageSession;
 
         public Task StartAsync(CancellationToken cancellationToken)
         {
@@ -46,8 +59,25 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 throw new InvalidOperationException("The listener has already been started.");
             }
 
-            _receiver = _messagingProvider.CreateMessageReceiver(_entityPath, _serviceBusAccount.ConnectionString);
-            _receiver.RegisterMessageHandler(ProcessMessageAsync, _messageProcessor.MessageOptions);
+            if (_serviceBusAccount.IsSessionsEnabled)
+            {
+                _clientEntity = _messagingProvider.CreateClientEntity(_serviceBusAccount.EntityPath, _serviceBusAccount.ConnectionString);
+
+                if (_clientEntity is QueueClient queueClient)
+                {
+                    queueClient.RegisterSessionHandler(ProcessSessionMessageAsync, _serviceBusOptions.SessionHandlerOptions);
+                }
+                else
+                {
+                    SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
+                    subscriptionClient.RegisterSessionHandler(ProcessSessionMessageAsync, _serviceBusOptions.SessionHandlerOptions);
+                }
+            }
+            else
+            {
+                _receiver = _messagingProvider.CreateMessageReceiver(_serviceBusAccount.EntityPath, _serviceBusAccount.ConnectionString);
+                _receiver.RegisterMessageHandler(ProcessMessageAsync, _serviceBusOptions.MessageHandlerOptions);
+            }
             _started = true;
 
             return Task.CompletedTask;
@@ -66,8 +96,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             // ProcessMessageAsync invocations to cancel
             _cancellationTokenSource.Cancel();
 
-            await _receiver.CloseAsync();
-            _receiver = null;
+            if (_receiver != null)
+            {
+                await _receiver.CloseAsync();
+                _receiver = null;
+            }
+            if (_clientEntity != null)
+            {
+                await _clientEntity.CloseAsync();
+                _clientEntity = null;
+            }
             _started = false;
         }
 
@@ -94,14 +132,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     _receiver = null;
                 }
 
+                if (_clientEntity != null)
+                {
+                    _clientEntity.CloseAsync().Wait();
+                    _clientEntity = null;
+                }
+
                 _disposed = true;
             }
         }
 
-        private Task ProcessMessageAsync(Message message)
-        {
-            return ProcessMessageAsync(message, _cancellationTokenSource.Token);
-        }
 
         internal async Task ProcessMessageAsync(Message message, CancellationToken cancellationToken)
         {
@@ -111,8 +151,19 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             }
 
             FunctionResult result = await _triggerExecutor.ExecuteAsync(message, cancellationToken);
-
             await _messageProcessor.CompleteProcessingMessageAsync(message, result, cancellationToken);
+        }
+
+        internal async Task ProcessSessionMessageAsync(IMessageSession session, Message message, CancellationToken cancellationToken)
+        {
+            _messageSession = session;
+            if (!await _sessionMessageProcessor.BeginProcessingMessageAsync(session, message, cancellationToken))
+            {
+                return;
+            }
+
+            FunctionResult result = await _triggerExecutor.ExecuteAsync(message, cancellationToken);
+            await _sessionMessageProcessor.CompleteProcessingMessageAsync(session, message, result, cancellationToken);
         }
 
         private void ThrowIfDisposed()

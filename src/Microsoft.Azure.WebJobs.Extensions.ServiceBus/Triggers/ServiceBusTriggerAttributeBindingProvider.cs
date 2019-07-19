@@ -56,12 +56,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             string subscriptionName = null;
             string entityPath = null;
 
-            if (attribute.QueueName != null)
+            if (!string.IsNullOrEmpty(attribute.QueueName))
             {
                 queueName = Resolve(attribute.QueueName);
                 entityPath = queueName;
             }
-            else
+            else if (!string.IsNullOrEmpty(attribute.TopicName) && !string.IsNullOrEmpty(attribute.SubscriptionName))
             {
                 topicName = Resolve(attribute.TopicName);
                 subscriptionName = Resolve(attribute.SubscriptionName);
@@ -75,17 +75,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             }
 
             attribute.Connection = Resolve(attribute.Connection);
-            ServiceBusAccount account = new ServiceBusAccount(_options, _configuration, attribute);
+            ServiceBusAccount account = new ServiceBusAccount(_options, _configuration, entityPath, attribute, attribute.IsSessionsEnabled);
 
-            ITriggerBinding binding;
-            if (queueName != null)
-            {
-                binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider, queueName);
-            }
-            else
-            {
-                binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider, topicName, subscriptionName);
-            }
+            ITriggerBinding binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider);
+
 
             return Task.FromResult<ITriggerBinding>(binding);
         }
