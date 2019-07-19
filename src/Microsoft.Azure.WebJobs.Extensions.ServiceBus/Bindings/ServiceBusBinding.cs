@@ -18,18 +18,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
         private readonly ServiceBusAccount _account;
         private readonly IBindableServiceBusPath _path;
         private readonly IAsyncObjectToTypeConverter<ServiceBusEntity> _converter;
-        private readonly EntityType _entityType;
         private readonly MessagingProvider _messagingProvider;
-        
+
         public ServiceBusBinding(string parameterName, IArgumentBinding<ServiceBusEntity> argumentBinding, ServiceBusAccount account, ServiceBusOptions config, IBindableServiceBusPath path, ServiceBusAttribute attr, MessagingProvider messagingProvider)
         {
             _parameterName = parameterName;
             _argumentBinding = argumentBinding;
             _account = account;
             _path = path;
-            _entityType = attr.EntityType;
             _messagingProvider = messagingProvider;
-            _converter = new OutputConverter<string>(new StringToServiceBusEntityConverter(account, _path, _entityType, _messagingProvider));
+            _converter = new OutputConverter<string>(new StringToServiceBusEntityConverter(account, _path, _messagingProvider));
         }
 
         public bool FromAttribute
@@ -46,8 +44,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
 
             var entity = new ServiceBusEntity
             {
-                MessageSender = messageSender,
-                EntityType = _entityType
+                MessageSender = messageSender
             };
 
             return await BindAsync(entity, context.ValueContext);
