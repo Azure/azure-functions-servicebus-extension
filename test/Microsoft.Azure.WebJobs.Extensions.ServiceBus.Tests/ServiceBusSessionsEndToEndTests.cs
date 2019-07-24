@@ -251,8 +251,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // filter out anything from the custom processor for easier validation.
                 List<LogMessage> consoleOutput1 = logMessages1.Where(m => m.Category == "Function.SBQueue1Trigger.User").ToList();
                 Assert.True(consoleOutput1.Count() == 10, ServiceBusSessionsTestHelper.GetLogsAsString(consoleOutput1));
-                double seconsds = (consoleOutput1[5].Timestamp - consoleOutput1[4].Timestamp).TotalSeconds;
-                Assert.True(seconsds > 90 && seconsds < 110, seconsds.ToString());
                 for (int i = 0; i < consoleOutput1.Count(); i++)
                 {
                     if (i < 5)
@@ -302,8 +300,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 // filter out anything from the custom processor for easier validation.
                 List<LogMessage> consoleOutput1 = logMessages1.Where(m => m.Category == "Function.SBSub1Trigger.User").ToList();
                 Assert.True(consoleOutput1.Count() == 10, ServiceBusSessionsTestHelper.GetLogsAsString(consoleOutput1));
-                double seconsds = (consoleOutput1[5].Timestamp - consoleOutput1[4].Timestamp).TotalSeconds;
-                Assert.True(seconsds > 90 && seconsds < 110, seconsds.ToString());
                 for (int i = 0; i < consoleOutput1.Count(); i++)
                 {
                     if (i < 5)

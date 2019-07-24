@@ -30,7 +30,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Bindings
             ServiceBusOptions config = new ServiceBusOptions();
             _mockMessagingProvider = new Mock<MessagingProvider>(MockBehavior.Strict, new OptionsWrapper<ServiceBusOptions>(config));
 
-            _provider = new ServiceBusTriggerAttributeBindingProvider(mockResolver.Object, config, _mockMessagingProvider.Object, _configuration);
+            Mock<IConverterManager> convertManager = new Mock<IConverterManager>(MockBehavior.Default);
+
+            _provider = new ServiceBusTriggerAttributeBindingProvider(mockResolver.Object, config, _mockMessagingProvider.Object, _configuration, convertManager.Object);
         }
 
         [Fact]

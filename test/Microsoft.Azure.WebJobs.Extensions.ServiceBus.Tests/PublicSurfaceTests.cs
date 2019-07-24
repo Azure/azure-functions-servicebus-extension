@@ -25,7 +25,8 @@ namespace Microsoft.Azure.WebJobs.Host.UnitTests
                 "ServiceBusHostBuilderExtensions",
                 "ServiceBusOptions",
                 "ServiceBusWebJobsStartup",
-                "SessionMessageProcessor"
+                "SessionMessageProcessor",
+                "BatchOptions"
             };
 
             TestHelpers.AssertPublicTypes(expected, assembly);
