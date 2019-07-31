@@ -25,5 +25,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         }
 
         public const string DefaultConnectionStringName = "ServiceBus";
+        public const string DefaultConectionSettingStringName = "AzureWebJobsServiceBus"; 
     }
 }
