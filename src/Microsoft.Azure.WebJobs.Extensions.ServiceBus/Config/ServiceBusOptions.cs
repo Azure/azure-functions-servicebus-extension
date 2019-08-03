@@ -85,7 +85,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             {
                 { nameof(PrefetchCount), PrefetchCount },
                 { nameof(MessageHandlerOptions), messageHandlerOptions },
-                { nameof(SessionHandlerOptions), sessionHandlerOptions }
+                { nameof(SessionHandlerOptions), sessionHandlerOptions },
             };
 
             return options.ToString(Formatting.Indented);
