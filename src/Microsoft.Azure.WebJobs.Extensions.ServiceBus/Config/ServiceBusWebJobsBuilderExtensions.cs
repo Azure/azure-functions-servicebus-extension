@@ -40,7 +40,8 @@ namespace Microsoft.Extensions.Hosting
             builder.AddExtension<ServiceBusExtensionConfigProvider>()
                 .ConfigureOptions<ServiceBusOptions>((config, path, options) =>
                 {
-                    options.ConnectionString = config.GetConnectionString(Constants.DefaultConnectionStringName);
+                    options.ConnectionString = config.GetConnectionString(Constants.DefaultConnectionStringName) ??
+                        config[Constants.DefaultConectionSettingStringName];
 
                     IConfigurationSection section = config.GetSection(path);
                     section.Bind(options);

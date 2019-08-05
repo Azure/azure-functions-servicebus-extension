@@ -8,6 +8,8 @@ using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.ServiceBus.Config;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.EnvironmentVariables;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -102,6 +104,29 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
             var serviceBusExtensionConfig = configProviders.OfType<ServiceBusExtensionConfigProvider>().Single();
 
             Assert.Equal(fakeConnStr, serviceBusExtensionConfig.Options.ConnectionString);
+        }
+
+
+        [Theory]
+        [InlineData("DefaultConnectionString", "DefaultConectionSettingString", "DefaultConnectionString")]
+        [InlineData("DefaultConnectionString", null, "DefaultConnectionString")]
+        [InlineData(null, "DefaultConectionSettingString", "DefaultConectionSettingString")]
+        [InlineData(null, null, null)]
+        public void ReadDeafultConnectionString(string defaultConnectionString, string sefaultConectionSettingString, string expectedValue)
+        {
+            ServiceBusOptions options = TestHelpers.GetConfiguredOptions<ServiceBusOptions>(b =>
+            {
+                var test = b.Services.Single(x => x.ServiceType == typeof(IConfiguration));
+
+                var envPrpvider = (test.ImplementationInstance as ConfigurationRoot).Providers
+                    .Single(x => x.GetType() == typeof(EnvironmentVariablesConfigurationProvider));
+                envPrpvider.Set("ConnectionStrings:" + Constants.DefaultConnectionStringName, defaultConnectionString);
+                envPrpvider.Set(Constants.DefaultConectionSettingStringName, sefaultConectionSettingString);
+
+                b.AddServiceBus();
+            }, new Dictionary<string, string>());
+
+            Assert.Equal(options.ConnectionString, expectedValue);
         }
     }
 }
