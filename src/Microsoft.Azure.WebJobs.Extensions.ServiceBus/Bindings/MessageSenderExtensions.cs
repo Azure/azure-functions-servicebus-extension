@@ -14,7 +14,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
     internal static class MessageSenderExtensions
     {
         public static async Task SendAndCreateEntityIfNotExists(this MessageSender sender, Message message,
-            Guid functionInstanceId, CancellationToken cancellationToken)
+            Guid functionInstanceId, EntityType entityType, CancellationToken cancellationToken)
         {
             if (sender == null)
             {

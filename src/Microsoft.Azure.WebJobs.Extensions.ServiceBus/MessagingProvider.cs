@@ -168,7 +168,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             }
             else
             {
-                // entityPath for a queue is "  {QueueName}"
+                // entityPath for a queue is "{QueueName}"
                 return _clientEntityCache.GetOrAdd(cacheKey, new QueueClient(connectionString, entityPath)
                 {
                     PrefetchCount = _options.PrefetchCount
