@@ -26,11 +26,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
     {
         private const string SecondaryConnectionStringKey = "ServiceBusSecondary";
 
-        private const string ServiceBusQueue1EntityPath = "ServiceBusQueue1EntityPath";
-        private const string ServiceBusQueue2EntityPath = "ServiceBusQueue2EntityPath";
-        private const string ServiceBusTopic1TriggerEntityPath = "ServiceBusTopic1TriggerEntityPath";
-        private const string ServiceBusTopic1OutputEntityPath = "ServiceBusTopic1OutputEntityPath";
-
         private const string Prefix = "core-test-";
         private const string FirstQueueName = Prefix + "queue1";
         private const string SecondQueueName = Prefix + "queue2";
@@ -74,12 +69,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         public async Task ServiceBusEndToEnd()
         {
             await ServiceBusEndToEndInternal<ServiceBusTestJobs>();
-        }
-
-        [Fact]
-        public async Task ServiceBusEndToEndEntityPath()
-        {
-            await ServiceBusEndToEndInternal<ServiceBusTestJobsEntityPath>();
         }
 
         [Fact]
@@ -409,82 +398,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             // First listener for the topic
             public static void SBTopicListener1(
                 [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] string message,
-                MessageReceiver messageReceiver,
-                string lockToken)
-            {
-                SBTopicListener1Impl(message);
-            }
-
-            // Second listener for the topic
-            // Just sprinkling Singleton here because previously we had a bug where this didn't work
-            // for ServiceBus.
-            [Singleton]
-            public static void SBTopicListener2(
-                [ServiceBusTrigger(TopicName, TopicSubscriptionName2)] Message message)
-            {
-                SBTopicListener2Impl(message);
-            }
-
-            // Demonstrate triggering on a queue in one account, and writing to a topic
-            // in the primary subscription
-            public static void MultipleAccounts(
-                [ServiceBusTrigger(FirstQueueName, Connection = SecondaryConnectionStringKey)] string input,
-                [ServiceBus(TopicName)] out string output)
-            {
-                output = input;
-            }
-
-            [NoAutomaticTrigger]
-            public static async Task ServiceBusBinderTest(
-                string message,
-                int numMessages,
-                Binder binder)
-            {
-                var attribute = new ServiceBusAttribute(BinderQueueName)
-                {
-                    EntityType = EntityType.Queue
-                };
-
-                var collector = await binder.BindAsync<IAsyncCollector<string>>(attribute);
-
-                for (int i = 0; i < numMessages; i++)
-                {
-                    await collector.AddAsync(message + i);
-                }
-
-                await collector.FlushAsync();
-            }
-        }
-
-        public class ServiceBusTestJobsEntityPath : ServiceBusTestJobsBase
-        {
-            public static async Task SBQueue2SBQueue(
-                [ServiceBusTrigger(Connection = ServiceBusQueue1EntityPath)] string start, int deliveryCount,
-                MessageReceiver messageReceiver,
-                string lockToken,
-                [ServiceBus(Connection = ServiceBusQueue2EntityPath)] MessageSender messageSender)
-            {
-                Assert.Equal(FirstQueueName, messageReceiver.Path);
-                Assert.Equal(1, deliveryCount);
-
-                // verify the message receiver and token are valid
-                await messageReceiver.RenewLockAsync(lockToken);
-
-                var message = SBQueue2SBQueue_GetOutputMessage(start);
-                await messageSender.SendAsync(message);
-            }
-
-            // Passes a service bus message from a queue to topic using a brokered message 
-            public static void SBQueue2SBTopic(
-                [ServiceBusTrigger(Connection = ServiceBusQueue2EntityPath)] string message,
-                [ServiceBus(Connection = ServiceBusTopic1OutputEntityPath)] out Message output)
-            {
-                output = SBQueue2SBTopic_GetOutputMessage(message);
-            }
-
-            // First listener for the topic
-            public static void SBTopicListener1(
-                [ServiceBusTrigger(Connection = ServiceBusTopic1TriggerEntityPath)] string message,
                 MessageReceiver messageReceiver,
                 string lockToken)
             {
