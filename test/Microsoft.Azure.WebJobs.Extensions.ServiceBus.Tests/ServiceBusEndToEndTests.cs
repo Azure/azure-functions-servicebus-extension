@@ -440,7 +440,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 int numMessages,
                 Binder binder)
             {
-                var attribute = new ServiceBusAttribute(BinderQueueName);
+                var attribute = new ServiceBusAttribute(BinderQueueName)
+                {
+                    EntityType = EntityType.Queue
+                };
 
                 var collector = await binder.BindAsync<IAsyncCollector<string>>(attribute);
 
@@ -513,7 +516,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 int numMessages,
                 Binder binder)
             {
-                var attribute = new ServiceBusAttribute(BinderQueueName);
+                var attribute = new ServiceBusAttribute(BinderQueueName)
+                {
+                    EntityType = EntityType.Queue
+                };
 
                 var collector = await binder.BindAsync<IAsyncCollector<string>>(attribute);
 
