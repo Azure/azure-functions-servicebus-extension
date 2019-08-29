@@ -24,13 +24,15 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         private readonly ITriggerDataArgumentBinding<Message> _argumentBinding;
         private readonly IReadOnlyDictionary<string, Type> _bindingDataContract;
         private readonly ServiceBusAccount _account;
+        private readonly string _entityPath;
+        private readonly bool _isSessionsEnabled;
         private readonly ServiceBusOptions _options;
         private ServiceBusListener _listener;
         private readonly MessagingProvider _messagingProvider;
 
 
         public ServiceBusTriggerBinding(string parameterName, Type parameterType, ITriggerDataArgumentBinding<Message> argumentBinding,
-            ServiceBusAccount account, ServiceBusOptions options, MessagingProvider messagingProvider)
+            ServiceBusAccount account, ServiceBusOptions options, MessagingProvider messagingProvider, string entityPath, bool isSessionsEnabled)
         {
             _parameterName = parameterName;
             _converter = CreateConverter(parameterType);
@@ -39,6 +41,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             _account = account;
             _options = options;
             _messagingProvider = messagingProvider;
+            _entityPath = entityPath;
+            _isSessionsEnabled = isSessionsEnabled;
         }
 
         public Type TriggerValueType
@@ -75,7 +79,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
                 throw new ArgumentNullException("context");
             }
 
-            IListenerFactory factory = new ServiceBusListenerFactory(_account, context.Executor, _options, _messagingProvider);
+            IListenerFactory factory = new ServiceBusListenerFactory(_account, _entityPath, _isSessionsEnabled, context.Executor, _options, _messagingProvider);
 
             _listener = (ServiceBusListener)await factory.CreateAsync(context.CancellationToken);
 
@@ -163,8 +167,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             return new ServiceBusTriggerParameterDescriptor
             {
                 Name = _parameterName,
-                EntityPath = _account.EntityPath,
-                DisplayHints = ServiceBusBinding.CreateParameterDisplayHints(_account.EntityPath, true)
+                EntityPath = _entityPath,
+                DisplayHints = ServiceBusBinding.CreateParameterDisplayHints(_entityPath, true)
             };
         }
 

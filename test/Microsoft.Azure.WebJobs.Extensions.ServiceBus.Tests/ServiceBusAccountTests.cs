@@ -18,26 +18,18 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
                 .Build();
         }
 
-        [Theory]
-        [InlineData(
-            "Endpoint=sb://default.servicebus.windows.net;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=",
-            "Endpoint=sb://default.servicebus.windows.net;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=",
-            "entity-name")]
-        [InlineData(
-            "Endpoint=sb://default.servicebus.windows.net;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=;EntityPath=entity-name-cs",
-            "Endpoint=sb://default.servicebus.windows.net;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=",
-            "entity-name-cs")]
-        public void GetConnectionString_ReturnsExpectedConnectionString(string connectionStringInitial, string connectionString, string entityName)
+        [Fact]
+        public void GetConnectionString_ReturnsExpectedConnectionString()
         {
+            string defaultConnection = "Endpoint=sb://default.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=";
             var options = new ServiceBusOptions()
             {
-                ConnectionString = connectionStringInitial
+                ConnectionString = defaultConnection
             };
-            ServiceBusTriggerAttribute attribute = new ServiceBusTriggerAttribute(entityName);
-            var account = new ServiceBusAccount(options, _configuration, entityName, attribute);
+            var attribute = new ServiceBusTriggerAttribute("entity-name");
+            var account = new ServiceBusAccount(options, _configuration, attribute);
 
-            Assert.Equal(connectionString, account.ConnectionString);
-            Assert.Equal(entityName, account.EntityPath);
+            Assert.True(defaultConnection == account.ConnectionString);
         }
 
         [Fact]
@@ -49,7 +41,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
 
             var ex = Assert.Throws<InvalidOperationException>(() =>
             {
-                var account = new ServiceBusAccount(config, _configuration, "testqueue", attribute);
+                var account = new ServiceBusAccount(config, _configuration, attribute);
                 var cs = account.ConnectionString;
             });
             Assert.Equal("Microsoft Azure WebJobs SDK ServiceBus connection string 'MissingConnection' is missing or empty.", ex.Message);
@@ -58,7 +50,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             config.ConnectionString = null;
             ex = Assert.Throws<InvalidOperationException>(() =>
             {
-                var account = new ServiceBusAccount(config, _configuration, "testqueue", attribute);
+                var account = new ServiceBusAccount(config, _configuration, attribute);
                 var cs = account.ConnectionString;
             });
             Assert.Equal("Microsoft Azure WebJobs SDK ServiceBus connection string 'AzureWebJobsServiceBus' is missing or empty.", ex.Message);
