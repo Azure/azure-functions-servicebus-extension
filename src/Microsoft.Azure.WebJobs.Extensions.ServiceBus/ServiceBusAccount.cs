@@ -13,7 +13,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         private readonly ServiceBusOptions _options;
         private readonly IConnectionProvider _connectionProvider;
         private readonly IConfiguration _configuration;
-        private string _connectionString;
+        private ServiceBusConnection _connection;
 
         public ServiceBusAccount(ServiceBusOptions options, IConfiguration configuration, IConnectionProvider connectionProvider = null)
         {
@@ -25,29 +25,49 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         internal ServiceBusAccount()
         {
         }
-
-        public virtual string ConnectionString
+        
+        public virtual ServiceBusConnection Connection
         {
             get
             {
-                if (string.IsNullOrEmpty(_connectionString))
+                if (_connection == null)
                 {
-                    _connectionString = _options.ConnectionString;
-                    if (_connectionProvider != null && !string.IsNullOrEmpty(_connectionProvider.Connection))
-                    {
-                        _connectionString = _configuration.GetWebJobsConnectionString(_connectionProvider.Connection);
-                    }
-
-                    if (string.IsNullOrEmpty(_connectionString))
-                    {
-                        throw new InvalidOperationException(
-                            string.Format(CultureInfo.InvariantCulture, "Microsoft Azure WebJobs SDK ServiceBus connection string '{0}' is missing or empty.",
-                            Sanitizer.Sanitize(_connectionProvider.Connection) ?? Constants.DefaultConectionSettingStringName));
-                    }
+                    _connection = GetConnectionValue();
                 }
 
-                return _connectionString;
+                return _connection;
             }
+        }
+
+        private ServiceBusConnection GetConnectionValue()
+        {
+            var isManagedIdentityConnection = _options.UseManagedServiceIdentity;
+            var connection = _options.UseManagedServiceIdentity
+                ? _options.Endpoint
+                : _options.ConnectionString;
+
+            if (_connectionProvider != null && !string.IsNullOrEmpty(_connectionProvider.Connection))
+            {
+                connection = _configuration.GetWebJobsConnectionString(_connectionProvider.Connection);
+            }
+
+            if (string.IsNullOrEmpty(connection))
+            {
+                var message = isManagedIdentityConnection 
+                    ? "Microsoft Azure WebJobs SDK ServiceBus endpoint '{0}' is missing or empty."
+                    : "Microsoft Azure WebJobs SDK ServiceBus connection string '{0}' is missing or empty.";
+                throw new InvalidOperationException(string.Format(CultureInfo.InvariantCulture, message,
+                        Sanitizer.Sanitize(_connectionProvider?.Connection) ?? Constants.DefaultConectionSettingStringName));
+            }
+
+            var isEndpoint = Uri.TryCreate(connection, UriKind.Absolute, out _);
+            if (!isEndpoint)
+            {
+                //assuming that the connection is connection string
+                isManagedIdentityConnection = false;
+            }
+
+            return new ServiceBusConnection(connection, isManagedIdentityConnection);
         }
     }
 }

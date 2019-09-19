@@ -4,6 +4,8 @@
 using System;
 using System.Threading.Tasks;
 using Microsoft.Azure.ServiceBus;
+using Microsoft.Azure.ServiceBus.Core;
+using Microsoft.Azure.ServiceBus.Primitives;
 using Microsoft.Azure.WebJobs.Hosting;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -35,6 +37,22 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         /// Gets or sets the Azure ServiceBus connection string.
         /// </summary>
         public string ConnectionString { get; set; }
+
+        /// <summary>
+        /// Enables use of managed service identity
+        /// </summary>
+        public bool UseManagedServiceIdentity { get; set; }
+
+        /// <summary>
+        /// Token provider that will be used with MSI
+        /// <see cref="TokenProvider"/>
+        /// </summary>
+        public TokenProvider ServiceBusTokenProvider { get; set; }
+
+        /// <summary>
+        /// Endpoint setting in case managed service identity is used
+        /// </summary>
+        public string Endpoint { get; set; }
 
         /// <summary>
         /// Gets or sets the default <see cref="Azure.ServiceBus.MessageHandlerOptions"/> that will be used by

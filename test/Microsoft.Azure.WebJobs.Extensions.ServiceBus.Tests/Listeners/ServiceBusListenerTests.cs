@@ -29,6 +29,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
         {
             _mockExecutor = new Mock<ITriggeredFunctionExecutor>(MockBehavior.Strict);
 
+            ServiceBusConnection connection = new ServiceBusConnection(_testConnection, false);
             MessageHandlerOptions messageOptions = new MessageHandlerOptions(ExceptionReceivedHandler);
             MessageReceiver messageReceiver = new MessageReceiver(_testConnection, _entityPath);
             _mockMessageProcessor = new Mock<MessageProcessor>(MockBehavior.Strict, messageReceiver, messageOptions);
@@ -39,12 +40,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             };
             _mockMessagingProvider = new Mock<MessagingProvider>(MockBehavior.Strict, new OptionsWrapper<ServiceBusOptions>(config));
 
-            _mockMessagingProvider.Setup(p => p.CreateMessageProcessor(_entityPath, _testConnection))
+            _mockMessagingProvider.Setup(p => p.CreateMessageProcessor(_entityPath, connection))
                 .Returns(_mockMessageProcessor.Object);
 
             ServiceBusTriggerExecutor triggerExecutor = new ServiceBusTriggerExecutor(_mockExecutor.Object);
             var mockServiceBusAccount = new Mock<ServiceBusAccount>(MockBehavior.Strict);
-            mockServiceBusAccount.Setup(a => a.ConnectionString).Returns(_testConnection);
+            mockServiceBusAccount.Setup(a => a.Connection).Returns(connection);
 
             _listener = new ServiceBusListener(_entityPath, false, triggerExecutor, config, mockServiceBusAccount.Object, _mockMessagingProvider.Object);
         }

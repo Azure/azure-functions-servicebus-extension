@@ -38,7 +38,7 @@ namespace Microsoft.Azure.WebJobs
         public string Account { get; private set; }
 
         /// <summary>
-        /// Gets or sets the app setting name that contains the Service Bus connection string.
+        /// Gets or sets the app setting name that contains the Service Bus connection string or endpoint for MSI authentication.
         /// </summary>
         string IConnectionProvider.Connection
         {

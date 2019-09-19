@@ -37,12 +37,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
             get { return true; }
         }
 
-        public async Task<IValueProvider> BindAsync(BindingContext context)
+        public Task<IValueProvider> BindAsync(BindingContext context)
         {
             context.CancellationToken.ThrowIfCancellationRequested();
 
             string boundQueueName = _path.Bind(context.BindingData);
-            var messageSender = _messagingProvider.CreateMessageSender(boundQueueName, _account.ConnectionString);
+            var messageSender = _messagingProvider.CreateMessageSender(boundQueueName, _account.Connection);
 
             var entity = new ServiceBusEntity
             {
@@ -50,7 +50,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
                 EntityType = _entityType
             };
 
-            return await BindAsync(entity, context.ValueContext);
+            return BindAsync(entity, context.ValueContext);
         }
 
         public async Task<IValueProvider> BindAsync(object value, ValueBindingContext context)

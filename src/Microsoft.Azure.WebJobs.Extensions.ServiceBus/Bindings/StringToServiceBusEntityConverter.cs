@@ -38,7 +38,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Bindings
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            var messageSender = _messagingProvider.CreateMessageSender(queueOrTopicName, _account.ConnectionString);
+            var messageSender = _messagingProvider.CreateMessageSender(queueOrTopicName, _account.Connection);
 
             var entity = new ServiceBusEntity
             {

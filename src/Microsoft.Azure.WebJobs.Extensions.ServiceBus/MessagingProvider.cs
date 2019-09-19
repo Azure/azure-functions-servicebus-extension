@@ -1,11 +1,12 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
-using System;
-using System.Collections.Concurrent;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
+using Microsoft.Azure.ServiceBus.Primitives;
 using Microsoft.Extensions.Options;
+using System;
+using System.Collections.Concurrent;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
 {
@@ -16,6 +17,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
     public class MessagingProvider
     {
         private readonly ServiceBusOptions _options;
+        private readonly TokenProvider _tokenProvider;
         private readonly ConcurrentDictionary<string, MessageReceiver> _messageReceiverCache = new ConcurrentDictionary<string, MessageReceiver>();
         private readonly ConcurrentDictionary<string, MessageSender> _messageSenderCache = new ConcurrentDictionary<string, MessageSender>();
         private readonly ConcurrentDictionary<string, ClientEntity> _clientEntityCache = new ConcurrentDictionary<string, ClientEntity>();
@@ -27,26 +29,31 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         public MessagingProvider(IOptions<ServiceBusOptions> serviceBusOptions)
         {
             _options = serviceBusOptions?.Value ?? throw new ArgumentNullException(nameof(serviceBusOptions));
+            if (_options.UseManagedServiceIdentity && string.IsNullOrEmpty(_options.Endpoint))
+            {
+                throw new ArgumentNullException(nameof(_options.Endpoint));
+            }
+            _tokenProvider = _options.ServiceBusTokenProvider ?? TokenProvider.CreateManagedServiceIdentityTokenProvider();
         }
 
         /// <summary>
         /// Creates a <see cref="MessageProcessor"/> for the specified ServiceBus entity.
         /// </summary>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="MessageProcessor"/> for.</param>
-        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <param name="connection">The ServiceBus connection connection.</param>
         /// <returns>The <see cref="MessageProcessor"/>.</returns>
-        public virtual MessageProcessor CreateMessageProcessor(string entityPath, string connectionString)
+        public virtual MessageProcessor CreateMessageProcessor(string entityPath, ServiceBusConnection connection)
         {
             if (string.IsNullOrEmpty(entityPath))
             {
                 throw new ArgumentNullException("entityPath");
             }
-            if (string.IsNullOrEmpty(connectionString))
+            if (connection == null)
             {
-                throw new ArgumentNullException("connectionString");
+                throw new ArgumentNullException("connection");
             }
 
-            return new MessageProcessor(GetOrAddMessageReceiver(entityPath, connectionString), _options.MessageHandlerOptions);
+            return new MessageProcessor(GetOrAddMessageReceiver(entityPath, connection), _options.MessageHandlerOptions);
         }
 
         /// <summary>
@@ -56,20 +63,20 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         /// You can override this method to customize the <see cref="MessageReceiver"/>.
         /// </remarks>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="MessageReceiver"/> for.</param>
-        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <param name="connection">The ServiceBus connection connection.</param>
         /// <returns></returns>
-        public virtual MessageReceiver CreateMessageReceiver(string entityPath, string connectionString)
+        public virtual MessageReceiver CreateMessageReceiver(string entityPath, ServiceBusConnection connection)
         {
             if (string.IsNullOrEmpty(entityPath))
             {
                 throw new ArgumentNullException("entityPath");
             }
-            if (string.IsNullOrEmpty(connectionString))
+            if (connection == null)
             {
-                throw new ArgumentNullException("connectionString");
+                throw new ArgumentNullException("connection");
             }
 
-            return GetOrAddMessageReceiver(entityPath, connectionString);
+            return GetOrAddMessageReceiver(entityPath, connection);
         }
 
         /// <summary>
@@ -79,20 +86,20 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         /// You can override this method to customize the <see cref="MessageSender"/>.
         /// </remarks>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="MessageSender"/> for.</param>
-        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <param name="connection">The ServiceBus connection connection.</param>
         /// <returns></returns>
-        public virtual MessageSender CreateMessageSender(string entityPath, string connectionString)
+        public virtual MessageSender CreateMessageSender(string entityPath, ServiceBusConnection connection)
         {
             if (string.IsNullOrEmpty(entityPath))
             {
                 throw new ArgumentNullException("entityPath");
             }
-            if (string.IsNullOrEmpty(connectionString))
+            if (connection == null)
             {
-                throw new ArgumentNullException("connectionString");
+                throw new ArgumentNullException("connection");
             }
 
-            return GetOrAddMessageSender(entityPath, connectionString);
+            return GetOrAddMessageSender(entityPath, connection);
         }
 
         /// <summary>
@@ -102,77 +109,115 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         /// You can override this method to customize the <see cref="ClientEntity"/>.
         /// </remarks>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="ClientEntity"/> for.</param>
-        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <param name="connection">The ServiceBus connection connection.</param>
         /// <returns></returns>
-        public virtual ClientEntity CreateClientEntity(string entityPath, string connectionString)
+        public virtual ClientEntity CreateClientEntity(string entityPath, ServiceBusConnection connection)
         {
             if (string.IsNullOrEmpty(entityPath))
             {
                 throw new ArgumentNullException("entityPath");
             }
-            if (string.IsNullOrEmpty(connectionString))
+            if (connection == null)
             {
-                throw new ArgumentNullException("connectionString");
+                throw new ArgumentNullException("connection");
             }
 
-            return GetOrAddClientEntity(entityPath, connectionString);
+            return GetOrAddClientEntity(entityPath, connection);
         }
 
         /// <summary>
         /// Creates a <see cref="SessionMessageProcessor"/> for the specified ServiceBus entity.
         /// </summary>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="SessionMessageProcessor"/> for.</param>
-        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <param name="connection">The ServiceBus connection connection.</param>
         /// <returns></returns>
-        public virtual SessionMessageProcessor CreateSessionMessageProcessor(string entityPath, string connectionString)
+        public virtual SessionMessageProcessor CreateSessionMessageProcessor(string entityPath, ServiceBusConnection connection)
         {
             if (string.IsNullOrEmpty(entityPath))
             {
                 throw new ArgumentNullException("entityPath");
             }
-            if (string.IsNullOrEmpty(connectionString))
+            if (connection == null)
             {
-                throw new ArgumentNullException("connectionString");
+                throw new ArgumentNullException("connection");
             }
 
-            return new SessionMessageProcessor(GetOrAddClientEntity(entityPath, connectionString), _options.SessionHandlerOptions);
+            return new SessionMessageProcessor(GetOrAddClientEntity(entityPath, connection), _options.SessionHandlerOptions);
         }
 
-        private MessageReceiver GetOrAddMessageReceiver(string entityPath, string connectionString)
+        private MessageReceiver GetOrAddMessageReceiver(string entityPath, ServiceBusConnection connection)
         {
-            string cacheKey = $"{entityPath}-{connectionString}";
-            return _messageReceiverCache.GetOrAdd(cacheKey,
-                new MessageReceiver(connectionString, entityPath)
-                {
-                    PrefetchCount = _options.PrefetchCount
-                });
+            var cacheKey = $"{entityPath}-{connection.ConnectionValue}";
+            if (connection.IsManagedIdentityConnection)
+            {
+                return _messageReceiverCache.GetOrAdd(cacheKey,
+                    new MessageReceiver(connection.ConnectionValue, entityPath, _tokenProvider)
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+            }
+            else
+            {
+                return _messageReceiverCache.GetOrAdd(cacheKey,
+                    new MessageReceiver(connection.ConnectionValue, entityPath)
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+            }
         }
 
-        private MessageSender GetOrAddMessageSender(string entityPath, string connectionString)
+        private MessageSender GetOrAddMessageSender(string entityPath, ServiceBusConnection connection)
         {
-            string cacheKey = $"{entityPath}-{connectionString}";
-            return _messageSenderCache.GetOrAdd(cacheKey, new MessageSender(connectionString, entityPath));
+            var cacheKey = $"{entityPath}-{connection.ConnectionValue}";
+            if (connection.IsManagedIdentityConnection)
+            {
+                return _messageSenderCache.GetOrAdd(cacheKey, new MessageSender(connection.ConnectionValue, entityPath, _tokenProvider));
+            }
+            else
+            {
+                return _messageSenderCache.GetOrAdd(cacheKey, new MessageSender(connection.ConnectionValue, entityPath));
+            }
         }
 
-        private ClientEntity GetOrAddClientEntity(string entityPath, string connectionString)
+        private ClientEntity GetOrAddClientEntity(string entityPath, ServiceBusConnection connection)
         {
-            string cacheKey = $"{entityPath}-{connectionString}";
+            var cacheKey = $"{entityPath}-{connection.ConnectionValue}";
             string[] arr = entityPath.Split(new string[] { "/Subscriptions/" }, StringSplitOptions.None);
             if (arr.Length == 2)
             {
                 // entityPath for a subscription is "{TopicName}/Subscriptions/{SubscriptionName}"
-                return _clientEntityCache.GetOrAdd(cacheKey, new SubscriptionClient(connectionString, arr[0], arr[1])
+                if (connection.IsManagedIdentityConnection)
                 {
-                    PrefetchCount = _options.PrefetchCount
-                });
+                    return _clientEntityCache.GetOrAdd(cacheKey, new SubscriptionClient(connection.ConnectionValue, arr[0], arr[1], _tokenProvider)
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+                }
+                else
+                {
+                    return _clientEntityCache.GetOrAdd(cacheKey, new SubscriptionClient(connection.ConnectionValue, arr[0], arr[1])
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+                }
             }
             else
             {
                 // entityPath for a queue is "{QueueName}"
-                return _clientEntityCache.GetOrAdd(cacheKey, new QueueClient(connectionString, entityPath)
+                if (connection.IsManagedIdentityConnection)
                 {
-                    PrefetchCount = _options.PrefetchCount
-                });
+                    return _clientEntityCache.GetOrAdd(cacheKey, new QueueClient(connection.ConnectionValue, entityPath, _tokenProvider)
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+                }
+                else
+                {
+                    return _clientEntityCache.GetOrAdd(cacheKey, new QueueClient(connection.ConnectionValue, entityPath)
+                    {
+                        PrefetchCount = _options.PrefetchCount
+                    });
+                }
             }
         }
     }
