@@ -5,6 +5,7 @@ using System;
 using System.Collections.Concurrent;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
+using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
 using Microsoft.Extensions.Options;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
@@ -157,11 +158,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         private ClientEntity GetOrAddClientEntity(string entityPath, string connectionString)
         {
             string cacheKey = $"{entityPath}-{connectionString}";
-            string[] arr = entityPath.Split(new string[] { "/Subscriptions/" }, StringSplitOptions.None);
-            if (arr.Length == 2)
+            if (ServiceBusEntityPathHelper.ParseEntityType(entityPath) == EntityType.Topic)
             {
+                string topic, subscription;
+
                 // entityPath for a subscription is "{TopicName}/Subscriptions/{SubscriptionName}"
-                return _clientEntityCache.GetOrAdd(cacheKey, new SubscriptionClient(connectionString, arr[0], arr[1])
+                ServiceBusEntityPathHelper.ParseTopicAndSubscription(entityPath, out topic, out subscription);
+                return _clientEntityCache.GetOrAdd(cacheKey, new SubscriptionClient(connectionString, topic, subscription)
                 {
                     PrefetchCount = _options.PrefetchCount
                 });

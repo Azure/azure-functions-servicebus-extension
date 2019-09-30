@@ -10,6 +10,7 @@ using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Azure.WebJobs.ServiceBus.Triggers;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Newtonsoft.Json;
 using Xunit;
@@ -28,8 +29,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Triggers
             var argumentBinding = provider.TryCreate(pi);
             var options = new ServiceBusOptions();
             var messagingProvider = new MessagingProvider(new OptionsWrapper<ServiceBusOptions>(options));
-            _queueBinding = new ServiceBusTriggerBinding("parameterName", typeof(UserDataType), argumentBinding, null, options, messagingProvider, "queueName", false);
-            _topicBinding = new ServiceBusTriggerBinding("parameterName", typeof(UserDataType), argumentBinding, null, options, messagingProvider, "subscriptionName/Subsciptions/topicName", false);
+            _queueBinding = new ServiceBusTriggerBinding("parameterName", typeof(UserDataType), argumentBinding, null, options, messagingProvider, EntityType.Queue, "queueName", false, NullLoggerFactory.Instance);
+            _topicBinding = new ServiceBusTriggerBinding("parameterName", typeof(UserDataType), argumentBinding, null, options, messagingProvider, EntityType.Topic, "subscriptionName/Subsciptions/topicName", false, NullLoggerFactory.Instance);
         }
 
         [Theory]
