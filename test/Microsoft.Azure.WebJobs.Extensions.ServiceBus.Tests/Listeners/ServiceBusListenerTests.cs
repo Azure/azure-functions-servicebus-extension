@@ -8,20 +8,26 @@ using System.Threading.Tasks;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
 using Microsoft.Azure.WebJobs.Host.Executors;
+using Microsoft.Azure.WebJobs.Host.Scale;
+using Microsoft.Azure.WebJobs.Host.TestCommon;
 using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moq;
 using Xunit;
+using static Microsoft.Azure.ServiceBus.Message;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
 {
     public class ServiceBusListenerTests
     {
-        //private readonly MessagingFactory _messagingFactory;
         private readonly ServiceBusListener _listener;
         private readonly Mock<ITriggeredFunctionExecutor> _mockExecutor;
         private readonly Mock<MessagingProvider> _mockMessagingProvider;
         private readonly Mock<MessageProcessor> _mockMessageProcessor;
+        private readonly TestLoggerProvider _loggerProvider;
+        private readonly LoggerFactory _loggerFactory;
+        private readonly string _functionId = "test-functionid";
         private readonly string _entityPath = "test-entity-path";
         private readonly string _testConnection = "Endpoint=sb://test.servicebus.windows.net/;SharedAccessKeyName=RootManageSharedAccessKey;SharedAccessKey=abc123=";
 
@@ -39,14 +45,20 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             };
             _mockMessagingProvider = new Mock<MessagingProvider>(MockBehavior.Strict, new OptionsWrapper<ServiceBusOptions>(config));
 
-            _mockMessagingProvider.Setup(p => p.CreateMessageProcessor(_entityPath, _testConnection))
+            _mockMessagingProvider
+                .Setup(p => p.CreateMessageProcessor(_entityPath, _testConnection))
                 .Returns(_mockMessageProcessor.Object);
 
             ServiceBusTriggerExecutor triggerExecutor = new ServiceBusTriggerExecutor(_mockExecutor.Object);
-            var mockServiceBusAccount = new Mock<ServiceBusAccount>(MockBehavior.Strict);
+            Mock<ServiceBusAccount> mockServiceBusAccount = new Mock<ServiceBusAccount>(MockBehavior.Strict);
             mockServiceBusAccount.Setup(a => a.ConnectionString).Returns(_testConnection);
 
-            _listener = new ServiceBusListener(_entityPath, false, triggerExecutor, config, mockServiceBusAccount.Object, _mockMessagingProvider.Object);
+            _loggerFactory = new LoggerFactory();
+            _loggerProvider = new TestLoggerProvider();
+            _loggerFactory.AddProvider(_loggerProvider);
+
+            _listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, triggerExecutor, config, mockServiceBusAccount.Object,
+                                _mockMessagingProvider.Object, _loggerFactory);
         }
 
         [Fact]
@@ -87,6 +99,19 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             await _listener.ProcessMessageAsync(message, CancellationToken.None);
 
             _mockMessageProcessor.VerifyAll();
+        }
+
+        [Fact]
+        public void GetMonitor_ReturnsExpectedValue()
+        {
+            IScaleMonitor scaleMonitor = _listener.GetMonitor();
+
+            Assert.Equal(scaleMonitor.GetType(), typeof(ServiceBusScaleMonitor));
+            Assert.Equal(scaleMonitor.Descriptor.Id, $"{_functionId}-ServiceBusTrigger-{_entityPath}".ToLower());
+
+            var scaleMonitor2 = _listener.GetMonitor();
+
+            Assert.Same(scaleMonitor, scaleMonitor2);
         }
 
         Task ExceptionReceivedHandler(ExceptionReceivedEventArgs eventArgs)

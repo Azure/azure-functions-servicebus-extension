@@ -10,6 +10,7 @@ using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Azure.WebJobs.Host.Converters;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
 {
@@ -27,13 +28,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
         private readonly IConfiguration _configuration;
+        private readonly ILoggerFactory _loggerFactory;
 
-        public ServiceBusTriggerAttributeBindingProvider(INameResolver nameResolver, ServiceBusOptions options, MessagingProvider messagingProvider, IConfiguration configuration)
+        public ServiceBusTriggerAttributeBindingProvider(INameResolver nameResolver, ServiceBusOptions options, MessagingProvider messagingProvider, IConfiguration configuration,
+            ILoggerFactory loggerFactory)
         {
             _nameResolver = nameResolver ?? throw new ArgumentNullException(nameof(nameResolver));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _messagingProvider = messagingProvider ?? throw new ArgumentNullException(nameof(messagingProvider));
             _configuration = configuration;
+            _loggerFactory = loggerFactory;
         }
 
         public Task<ITriggerBinding> TryCreateAsync(TriggerBindingProviderContext context)
@@ -55,17 +59,20 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             string topicName = null;
             string subscriptionName = null;
             string entityPath = null;
+            EntityType entityType;
 
             if (attribute.QueueName != null)
             {
                 queueName = Resolve(attribute.QueueName);
                 entityPath = queueName;
+                entityType = EntityType.Queue;
             }
             else
             {
                 topicName = Resolve(attribute.TopicName);
                 subscriptionName = Resolve(attribute.SubscriptionName);
                 entityPath = EntityNameHelper.FormatSubscriptionPath(topicName, subscriptionName);
+                entityType = EntityType.Topic;
             }
 
             ITriggerDataArgumentBinding<Message> argumentBinding = InnerProvider.TryCreate(parameter);
@@ -77,7 +84,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             attribute.Connection = Resolve(attribute.Connection);
             ServiceBusAccount account = new ServiceBusAccount(_options, _configuration, attribute);
 
-            ITriggerBinding binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider, entityPath, attribute.IsSessionsEnabled);
+            ITriggerBinding binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider, entityType, entityPath, attribute.IsSessionsEnabled, _loggerFactory);
 
             return Task.FromResult<ITriggerBinding>(binding);
         }

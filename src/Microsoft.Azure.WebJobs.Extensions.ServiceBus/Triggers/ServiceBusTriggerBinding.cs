@@ -14,6 +14,7 @@ using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Azure.WebJobs.ServiceBus.Bindings;
 using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
+using Microsoft.Extensions.Logging;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
 {
@@ -24,15 +25,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         private readonly ITriggerDataArgumentBinding<Message> _argumentBinding;
         private readonly IReadOnlyDictionary<string, Type> _bindingDataContract;
         private readonly ServiceBusAccount _account;
+        private readonly EntityType _entityType;
         private readonly string _entityPath;
         private readonly bool _isSessionsEnabled;
         private readonly ServiceBusOptions _options;
         private ServiceBusListener _listener;
         private readonly MessagingProvider _messagingProvider;
+        private readonly ILoggerFactory _loggerFactory;
 
-
-        public ServiceBusTriggerBinding(string parameterName, Type parameterType, ITriggerDataArgumentBinding<Message> argumentBinding,
-            ServiceBusAccount account, ServiceBusOptions options, MessagingProvider messagingProvider, string entityPath, bool isSessionsEnabled)
+        public ServiceBusTriggerBinding(string parameterName, Type parameterType, ITriggerDataArgumentBinding<Message> argumentBinding, ServiceBusAccount account,
+            ServiceBusOptions options, MessagingProvider messagingProvider, EntityType entityType, string entityPath, bool isSessionsEnabled, ILoggerFactory loggerFactory)
         {
             _parameterName = parameterName;
             _converter = CreateConverter(parameterType);
@@ -41,8 +43,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             _account = account;
             _options = options;
             _messagingProvider = messagingProvider;
+            _entityType = entityType;
             _entityPath = entityPath;
             _isSessionsEnabled = isSessionsEnabled;
+            _loggerFactory = loggerFactory;
         }
 
         public Type TriggerValueType
@@ -79,7 +83,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
                 throw new ArgumentNullException("context");
             }
 
-            IListenerFactory factory = new ServiceBusListenerFactory(_account, _entityPath, _isSessionsEnabled, context.Executor, _options, _messagingProvider);
+            IListenerFactory factory = new ServiceBusListenerFactory(_account, _entityType, _entityPath, _isSessionsEnabled, context.Executor, context.Descriptor, _options, _messagingProvider, _loggerFactory);
 
             _listener = (ServiceBusListener)await factory.CreateAsync(context.CancellationToken);
 
