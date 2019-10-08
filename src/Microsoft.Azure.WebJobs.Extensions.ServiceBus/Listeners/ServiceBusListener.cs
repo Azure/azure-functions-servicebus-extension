@@ -41,11 +41,11 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
             if (_isSessionsEnabled)
             {
-                _sessionMessageProcessor = _messagingProvider.CreateSessionMessageProcessor(entityPath, _serviceBusAccount.ConnectionString);
+                _sessionMessageProcessor = _messagingProvider.CreateSessionMessageProcessor(entityPath, _serviceBusAccount.Connection);
             }
             else
             {
-                _messageProcessor = _messagingProvider.CreateMessageProcessor(entityPath, _serviceBusAccount.ConnectionString);
+                _messageProcessor = _messagingProvider.CreateMessageProcessor(entityPath, _serviceBusAccount.Connection);
             }
             _serviceBusOptions = config;
         }
@@ -65,7 +65,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
             if (_isSessionsEnabled)
             {
-                _clientEntity = _messagingProvider.CreateClientEntity(_entityPath, _serviceBusAccount.ConnectionString);
+                _clientEntity = _messagingProvider.CreateClientEntity(_entityPath, _serviceBusAccount.Connection);
 
                 if (_clientEntity is QueueClient queueClient)
                 {
@@ -79,7 +79,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             }
             else
             {
-                _receiver = _messagingProvider.CreateMessageReceiver(_entityPath, _serviceBusAccount.ConnectionString);
+                _receiver = _messagingProvider.CreateMessageReceiver(_entityPath, _serviceBusAccount.Connection);
                 _receiver.RegisterMessageHandler(ProcessMessageAsync, _serviceBusOptions.MessageHandlerOptions);
             }
             _started = true;

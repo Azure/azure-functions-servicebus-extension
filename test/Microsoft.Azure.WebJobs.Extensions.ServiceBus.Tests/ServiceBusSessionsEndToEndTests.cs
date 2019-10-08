@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using ServiceBusConnection = Microsoft.Azure.WebJobs.ServiceBus.ServiceBusConnection;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
@@ -392,16 +393,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _logger = loggerFactory?.CreateLogger(CustomMessagingCategory);
             }
 
-            public override SessionMessageProcessor CreateSessionMessageProcessor(string entityPath, string connectionString)
+            public override SessionMessageProcessor CreateSessionMessageProcessor(string entityPath, ServiceBusConnection connection)
             {
                 if (entityPath == _queueName)
                 {
-                    return new CustomSessionMessageProcessor(new QueueClient(connectionString, entityPath), _options.SessionHandlerOptions, _logger);
+                    return new CustomSessionMessageProcessor(new QueueClient(connection.ConnectionValue, entityPath), _options.SessionHandlerOptions, _logger);
                 }
                 else
                 {
                     string[] arr = entityPath.Split('/');
-                    return new CustomSessionMessageProcessor(new SubscriptionClient(connectionString, arr[0], arr[2]), _options.SessionHandlerOptions, _logger);
+                    return new CustomSessionMessageProcessor(new SubscriptionClient(connection.ConnectionValue, arr[0], arr[2]), _options.SessionHandlerOptions, _logger);
                 }
             }
 

@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using ServiceBusConnection = Microsoft.Azure.WebJobs.ServiceBus.ServiceBusConnection;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
@@ -458,7 +459,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _logger = loggerFactory?.CreateLogger(CustomMessagingCategory);
             }
 
-            public override MessageProcessor CreateMessageProcessor(string entityPath, string connectionName = null)
+            public override MessageProcessor CreateMessageProcessor(string entityPath, ServiceBusConnection connection = null)
             {
                 var options = new MessageHandlerOptions(ExceptionReceivedHandler)
                 {
