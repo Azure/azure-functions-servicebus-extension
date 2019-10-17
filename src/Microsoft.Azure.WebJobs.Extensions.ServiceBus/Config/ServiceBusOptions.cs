@@ -25,7 +25,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             // own MessageHandlerOptions instance.
             MessageHandlerOptions = new MessageHandlerOptions(ExceptionReceivedHandler)
             {
-                MaxConcurrentCalls = 16
+                MaxConcurrentCalls = Utility.GetProcessorCount() * 16
             };
 
             SessionHandlerOptions = new SessionHandlerOptions(ExceptionReceivedHandler);
