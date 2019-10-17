@@ -280,7 +280,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     "  \"MessageHandlerOptions\": {",
                     "      \"AutoComplete\": true,",
                     "      \"MaxAutoRenewDuration\": \"00:05:00\",",
-                    "      \"MaxConcurrentCalls\": 16",
+                    $"      \"MaxConcurrentCalls\": {16 * Utility.GetProcessorCount()}",
                     "  }",
                     "  \"SessionHandlerOptions\": {",
                     "      \"MaxAutoRenewDuration\": \"00:05:00\",",
