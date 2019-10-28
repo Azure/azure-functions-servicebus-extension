@@ -3,7 +3,7 @@ This extension provides functionality for receiving Service Bus messges in Azure
 
 |Branch|Status|
 |---|---|
-|dev|[![Build Status](https://azfunc.visualstudio.com/Azure%20Functions/_apis/build/status/azure-functions-servicebus-extension-ci?branchName=dev)](https://azfunc.visualstudio.com/Azure%20Functions/_build/latest?definitionId=17&branchNamedev)
+|dev|[![Build Status](https://azfunc.visualstudio.com/Azure%20Functions/_apis/build/status/azure-functions-servicebus-extension-ci?branchName=dev)](https://azfunc.visualstudio.com/Azure%20Functions/_build/latest?definitionId=17&branchName=dev)
 
 ## License
 
