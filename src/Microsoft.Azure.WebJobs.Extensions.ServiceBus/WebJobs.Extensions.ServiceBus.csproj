@@ -6,7 +6,7 @@
     <RootNamespace>Microsoft.Azure.WebJobs.ServiceBus</RootNamespace>
     <PackageId>Microsoft.Azure.WebJobs.Extensions.ServiceBus</PackageId>
     <Description>Microsoft Azure WebJobs SDK ServiceBus Extension</Description>
-    <Version>3.2.1</Version>
+    <Version>3.2.0</Version>
     <CommitHash Condition="$(CommitHash) == ''">N/A</CommitHash>
     <InformationalVersion>$(Version) Commit hash: $(CommitHash)</InformationalVersion>
     <Authors>Microsoft</Authors>
