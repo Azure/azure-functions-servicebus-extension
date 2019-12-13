@@ -7,37 +7,36 @@ using System.Reflection;
 using System.Threading.Tasks;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.WebJobs.Host;
-using Microsoft.Azure.WebJobs.Host.Converters;
+using Microsoft.Azure.WebJobs.Host.Bindings;
+using Microsoft.Azure.WebJobs.Host.Listeners;
+using Microsoft.Azure.WebJobs.Host.Protocols;
 using Microsoft.Azure.WebJobs.Host.Triggers;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
+using Microsoft.Azure.WebJobs.Host.Config;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
 {
     internal class ServiceBusTriggerAttributeBindingProvider : ITriggerBindingProvider
     {
-        private static readonly IQueueTriggerArgumentBindingProvider InnerProvider =
-            new CompositeArgumentBindingProvider(
-                new ConverterArgumentBindingProvider<Message>(
-                    new AsyncConverter<Message, Message>(new IdentityConverter<Message>())),
-                new ConverterArgumentBindingProvider<string>(new MessageToStringConverter()),
-                new ConverterArgumentBindingProvider<byte[]>(new MessageToByteArrayConverter()),
-                new UserTypeArgumentBindingProvider()); // Must come last, because it will attempt to bind all types.
 
         private readonly INameResolver _nameResolver;
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly IConverterManager _converterManager;
 
         public ServiceBusTriggerAttributeBindingProvider(INameResolver nameResolver, ServiceBusOptions options, MessagingProvider messagingProvider, IConfiguration configuration,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory, IConverterManager converterManager)
         {
             _nameResolver = nameResolver ?? throw new ArgumentNullException(nameof(nameResolver));
             _options = options ?? throw new ArgumentNullException(nameof(options));
             _messagingProvider = messagingProvider ?? throw new ArgumentNullException(nameof(messagingProvider));
             _configuration = configuration;
             _loggerFactory = loggerFactory;
+            _converterManager = converterManager;
         }
 
         public Task<ITriggerBinding> TryCreateAsync(TriggerBindingProviderContext context)
@@ -75,16 +74,17 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
                 entityType = EntityType.Topic;
             }
 
-            ITriggerDataArgumentBinding<Message> argumentBinding = InnerProvider.TryCreate(parameter);
-            if (argumentBinding == null)
-            {
-                throw new InvalidOperationException(string.Format(CultureInfo.CurrentCulture, "Can't bind ServiceBusTrigger to type '{0}'.", parameter.ParameterType));
-            }
-
             attribute.Connection = Resolve(attribute.Connection);
             ServiceBusAccount account = new ServiceBusAccount(_options, _configuration, attribute);
 
-            ITriggerBinding binding = new ServiceBusTriggerBinding(parameter.Name, parameter.ParameterType, argumentBinding, account, _options, _messagingProvider, entityType, entityPath, attribute.IsSessionsEnabled, _loggerFactory);
+            Func<ListenerFactoryContext, bool, Task<IListener>> createListener =
+            (factoryContext, singleDispatch) =>
+            {
+                IListener listener = new ServiceBusListener(factoryContext.Descriptor.Id, entityType, entityPath, attribute.IsSessionsEnabled, factoryContext.Executor, _options, account, _messagingProvider, _loggerFactory, singleDispatch);
+                return Task.FromResult(listener);
+            };
+
+            ITriggerBinding binding = BindingFactory.GetTriggerBinding(new ServiceBusTriggerBindingStrategy(), parameter, _converterManager, createListener);
 
             return Task.FromResult<ITriggerBinding>(binding);
         }

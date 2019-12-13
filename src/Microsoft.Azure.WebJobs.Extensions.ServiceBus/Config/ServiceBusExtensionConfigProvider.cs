@@ -4,6 +4,7 @@
 using System;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.WebJobs.Description;
+using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Bindings;
@@ -12,6 +13,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Config
 {
@@ -26,6 +28,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
         private readonly ILoggerFactory _loggerFactory;
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
+        private readonly IConverterManager _converterManager;
 
         /// <summary>
         /// Creates a new <see cref="ServiceBusExtensionConfigProvider"/> instance.
@@ -35,13 +38,15 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
             MessagingProvider messagingProvider,
             INameResolver nameResolver,
             IConfiguration configuration,
-            ILoggerFactory loggerFactory)
+            ILoggerFactory loggerFactory,
+            IConverterManager converterManager)
         {
             _options = options.Value;
             _messagingProvider = messagingProvider;
             _nameResolver = nameResolver;
             _configuration = configuration;
             _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
+            _converterManager = converterManager;
         }
 
         /// <summary>
@@ -70,8 +75,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
                 LogExceptionReceivedEvent(e, _loggerFactory);
             };
 
+            context
+                .AddConverter<Message, string>(new MessageToStringConverter())
+                .AddConverter<Message, byte[]>(new MessageToByteArrayConverter())
+                .AddOpenConverter<Message, OpenType.Poco>(typeof(MessageToPocoConverter<>));
+
             // register our trigger binding provider
-            ServiceBusTriggerAttributeBindingProvider triggerBindingProvider = new ServiceBusTriggerAttributeBindingProvider(_nameResolver, _options, _messagingProvider, _configuration, _loggerFactory);
+            ServiceBusTriggerAttributeBindingProvider triggerBindingProvider = new ServiceBusTriggerAttributeBindingProvider(_nameResolver, _options, _messagingProvider, _configuration, _loggerFactory, _converterManager);
             context.AddBindingRule<ServiceBusTriggerAttribute>().BindToTrigger(triggerBindingProvider);
 
             // register our binding provider
@@ -111,6 +121,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
                 // of them, but we don't treat them as actual errors
                 return LogLevel.Information;
             }
-        }
+        }        
     }
 }

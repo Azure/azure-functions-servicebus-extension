@@ -5,10 +5,12 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Xml;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
@@ -147,6 +149,65 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.Equal("Test-topic-1", _resultMessage1);
         }
 
+        [Fact]
+        public async Task TestBatch_String()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToStringArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_Messages()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToMessageArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_JsonPoco()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_DataContractPoco()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>(true);
+        }
+
+        private async Task TestMultiple<T>(bool isXml = false)
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<T>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .Build();
+
+            if (isXml)
+            {
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test1", Value = "Value" });
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test2", Value = "Value" });
+            }
+            else
+            {
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test1', 'Value': 'Value'}");
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test2', 'Value': 'Value'}");
+            }
+
+            _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
+
+            await host.StartAsync();
+
+            bool result = _topicSubscriptionCalled1.WaitOne(SBTimeout);
+            Assert.True(result);
+
+            // ensure message are completed
+            await Task.Delay(2000);
+
+            // Wait for the host to terminate
+            await host.StopAsync();
+            host.Dispose();
+        }
+
         private async Task<int> CleanUpEntity(string queueName, string connectionString = null)
         {
             var messageReceiver = new MessageReceiver(!string.IsNullOrEmpty(connectionString) ? connectionString : _primaryConnectionString, queueName, ReceiveMode.ReceiveAndDelete);
@@ -248,16 +309,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     $"{jobContainerType.FullName}.SBTopicListener2",
                     $"{jobContainerType.FullName}.ServiceBusBinderTest",
                     "Job host started",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBQueue' (Reason='New ServiceBus message detected on '{FirstQueueName}'.', Id=",
+                    $"Executing '{jobContainerType.Name}.SBQueue2SBQueue' (Reason='', Id=",
                     $"Executed '{jobContainerType.Name}.SBQueue2SBQueue' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBTopic' (Reason='New ServiceBus message detected on '{SecondQueueName}'.', Id=",
+                    $"Executing '{jobContainerType.Name}.SBQueue2SBTopic' (Reason='', Id=",
                     $"Executed '{jobContainerType.Name}.SBQueue2SBTopic' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener1' (Reason='New ServiceBus message detected on '{EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName1)}'.', Id=",
+                    $"Executing '{jobContainerType.Name}.SBTopicListener1' (Reason='', Id=",
                     $"Executed '{jobContainerType.Name}.SBTopicListener1' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener2' (Reason='New ServiceBus message detected on '{EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName2)}'.', Id=",
+                    $"Executing '{jobContainerType.Name}.SBTopicListener2' (Reason='', Id=",
                     $"Executed '{jobContainerType.Name}.SBTopicListener2' (Succeeded, Id=",
                     $"Trigger Details:",
                     "Job host stopped",
@@ -289,6 +350,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     "      \"AutoComplete\": true",
                     "  }",
                     "}",
+                    "  \"BatchOptions\": {",
+                    "      \"MaxMessageCount\": 1000,",
+                    "      \"OperationTimeout\": \"00:01:00\",",
+                    "      \"AutoComplete\": true",
+                    "  }",
                     "SingletonOptions",
                     "{",
                     "  \"ListenerLockPeriod\": \"00:01:00\"",
@@ -321,11 +387,52 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        private async Task WriteQueueMessage(string connectionString, string queueName, string message)
+        public static async Task WriteQueueMessage(string connectionString, string queueName, string message, string sessionId = null)
         {
             QueueClient queueClient = new QueueClient(connectionString, queueName);
-            await queueClient.SendAsync(new Message(Encoding.UTF8.GetBytes(message)));
+            Message messageObj = new Message(Encoding.UTF8.GetBytes(message));
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                messageObj.SessionId = sessionId;
+            }
+            await queueClient.SendAsync(messageObj);
             await queueClient.CloseAsync();
+        }
+
+        public static async Task WriteQueueMessage(string connectionString, string queueName, TestPoco obj, string sessionId = null)
+        {
+            var serializer = new DataContractSerializer(typeof(TestPoco));
+            byte[] payload = null;
+            using (var memoryStream = new MemoryStream(10))
+            {
+                var xmlDictionaryWriter = XmlDictionaryWriter.CreateBinaryWriter(memoryStream, null, null, false);
+                serializer.WriteObject(xmlDictionaryWriter, obj);
+                xmlDictionaryWriter.Flush();
+                memoryStream.Flush();
+                memoryStream.Position = 0;
+                payload = memoryStream.ToArray();
+            }
+
+            QueueClient queueClient = new QueueClient(connectionString, queueName);
+            Message messageObj = new Message(payload);
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                messageObj.SessionId = sessionId;
+            }
+            await queueClient.SendAsync(messageObj);
+            await queueClient.CloseAsync();
+        }
+
+        public static async Task WriteTopicMessage(string connectionString, string topicName, string message, string sessionId = null)
+        {
+            TopicClient client = new TopicClient(connectionString, topicName);
+            Message messageObj = new Message(Encoding.UTF8.GetBytes(message));
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                messageObj.SessionId = sessionId;
+            }
+            await client.SendAsync(messageObj);
+            await client.CloseAsync();
         }
 
         public abstract class ServiceBusTestJobsBase
@@ -445,6 +552,80 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        public class ServiceBusMultipleTestJobsBase
+        {
+            protected static bool firstReceived = false;
+            protected static bool secondReceived = false;
+
+            public static void ProcessMessages(string[] messages)
+            {
+                if (messages.Contains("{'Name': 'Test1', 'Value': 'Value'}"))
+                {
+                    firstReceived = true;
+                }
+                if (messages.Contains("{'Name': 'Test2', 'Value': 'Value'}"))
+                {
+                    secondReceived = true;
+                }
+
+                if (firstReceived && secondReceived)
+                {
+                    _topicSubscriptionCalled1.Set();
+                }
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToStringArray 
+        {
+
+            public static async Task SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName)] string[] messages,
+                MessageReceiver messageReceiver, CancellationToken cancellationToken)
+            {
+                try
+                {
+                    Assert.Equal(FirstQueueName, messageReceiver.Path);
+                    ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+                    await Task.Delay(0, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToMessageArray 
+        {
+
+            public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName)] Message[] array,
+                MessageReceiver messageReceiver)
+            {
+                Assert.Equal(FirstQueueName, messageReceiver.Path);
+                string[] messages = array.Select(x =>
+                {
+                    using (Stream stream = new MemoryStream(x.Body))
+                    using (TextReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }).ToArray();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToPocoArray
+        {
+            public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName)] TestPoco[] array,
+                MessageReceiver messageReceiver)
+            {
+                Assert.Equal(FirstQueueName, messageReceiver.Path);
+                string[] messages = array.Select(x => "{'Name': '" + x.Name + "', 'Value': 'Value'}").ToArray();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
+
         private class CustomMessagingProvider : MessagingProvider
         {
             public const string CustomMessagingCategory = "CustomMessagingProvider";
@@ -504,5 +685,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         {
             Cleanup().GetAwaiter().GetResult();
         }
+    }
+
+    public class TestPoco
+    {
+        public string Name { get; set; }
+        public string Value { get; set; }
     }
 }

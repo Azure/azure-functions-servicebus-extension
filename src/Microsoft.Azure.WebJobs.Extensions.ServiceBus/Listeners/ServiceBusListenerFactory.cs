@@ -24,9 +24,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
         private readonly ILoggerFactory _loggerFactory;
+        private readonly bool _singleDispatch;
 
         public ServiceBusListenerFactory(ServiceBusAccount account, EntityType entityType, string entityPath, bool isSessionsEnabled, ITriggeredFunctionExecutor executor,
-            FunctionDescriptor descriptor, ServiceBusOptions options, MessagingProvider messagingProvider, ILoggerFactory loggerFactory)
+            FunctionDescriptor descriptor, ServiceBusOptions options, MessagingProvider messagingProvider, ILoggerFactory loggerFactory, bool singleDispatch)
         {
             _account = account;
             _entityType = entityType;
@@ -37,13 +38,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             _options = options;
             _messagingProvider = messagingProvider;
             _loggerFactory = loggerFactory;
+            _singleDispatch = singleDispatch;
         }
 
         public Task<IListener> CreateAsync(CancellationToken cancellationToken)
         {
-            var triggerExecutor = new ServiceBusTriggerExecutor(_executor);
-            var listener = new ServiceBusListener(_descriptor.Id, _entityType, _entityPath, _isSessionsEnabled, triggerExecutor, _options, _account, _messagingProvider, _loggerFactory);
-
+            var listener = new ServiceBusListener(_descriptor.Id, _entityType, _entityPath, _isSessionsEnabled, _executor, _options, _account, _messagingProvider, _loggerFactory, _singleDispatch);
             return Task.FromResult<IListener>(listener);
         }
     }

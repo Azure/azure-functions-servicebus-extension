@@ -29,6 +29,15 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             };
 
             SessionHandlerOptions = new SessionHandlerOptions(ExceptionReceivedHandler);
+
+            // Default operation timeout is 1 minute in ServiceBus SDK
+            // https://github.com/Azure/azure-sdk-for-net/blob/master/sdk/servicebus/Microsoft.Azure.ServiceBus/src/Constants.cs#L30
+            BatchOptions = new BatchOptions()
+            {
+                MaxMessageCount = 1000,
+                OperationTimeout = TimeSpan.FromMinutes(1),
+                AutoComplete = true
+            };
         }
 
         /// <summary>
@@ -52,6 +61,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         /// Gets or sets the default PrefetchCount that will be used by <see cref="MessageReceiver"/>s.
         /// </summary>
         public int PrefetchCount { get; set; }
+
+        /// <summary>
+        /// Gets or sets the default <see cref="Azure.ServiceBus.BatchOptions"/> that will be used by
+        /// <see cref="ClientEntity"/>s.
+        /// </summary>
+        public BatchOptions BatchOptions { get; set; }
 
         internal Action<ExceptionReceivedEventArgs> ExceptionHandler { get; set; }
 
@@ -80,12 +95,24 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 };
             }
 
+            JObject batchOptions = null;
+            if (BatchOptions != null)
+            {
+                batchOptions = new JObject
+                {
+                    { nameof(BatchOptions.MaxMessageCount), BatchOptions.MaxMessageCount },
+                    { nameof(BatchOptions.OperationTimeout), BatchOptions.OperationTimeout },
+                    { nameof(BatchOptions.AutoComplete), BatchOptions.AutoComplete },
+                };
+            }
+
             // Do not include ConnectionString in loggable options.
             JObject options = new JObject
             {
                 { nameof(PrefetchCount), PrefetchCount },
                 { nameof(MessageHandlerOptions), messageHandlerOptions },
-                { nameof(SessionHandlerOptions), sessionHandlerOptions }
+                { nameof(SessionHandlerOptions), sessionHandlerOptions },
+                { nameof(BatchOptions), batchOptions}
             };
 
             return options.ToString(Formatting.Indented);

@@ -57,11 +57,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 _waitHandle1 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
 
@@ -89,11 +89,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 _waitHandle1 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
 
@@ -125,20 +125,20 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _waitHandle1 = new ManualResetEvent(initialState: false);
                 _waitHandle2 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
                 Assert.True(_waitHandle2.WaitOne(SBTimeout));
@@ -177,20 +177,20 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _waitHandle1 = new ManualResetEvent(initialState: false);
                 _waitHandle2 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
                 Assert.True(_waitHandle2.WaitOne(SBTimeout));
@@ -228,20 +228,20 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _waitHandle1 = new ManualResetEvent(initialState: false);
                 _waitHandle2 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message1", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message2", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message3", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
                 Assert.True(_waitHandle2.WaitOne(SBTimeout));
@@ -279,20 +279,20 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 _waitHandle1 = new ManualResetEvent(initialState: false);
                 _waitHandle2 = new ManualResetEvent(initialState: false);
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message1", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message2", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message3", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session2");
 
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
-                await ServiceBusSessionsTestHelper.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
 
                 Assert.True(_waitHandle1.WaitOne(SBTimeout));
                 Assert.True(_waitHandle2.WaitOne(SBTimeout));
@@ -318,6 +318,65 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     }
                 }
             }
+        }
+
+        [Fact]
+        public async Task TestBatch_String()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToStringArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_Messages()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToMessageArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_JsonPoco()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>();
+        }
+
+        [Fact]
+        public async Task TestBatch_DataContractPoco()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>(true);
+        }
+
+        private async Task TestMultiple<T>(bool isXml = false)
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<T>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .Build();
+
+            if (isXml)
+            {
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, new TestPoco() { Name = "Test1" }, "sessionId");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, new TestPoco() { Name = "Test2" }, "sessionId");
+            }
+            else
+            {
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "{'Name': 'Test1', 'Value': 'Value'}", "sessionId");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "{'Name': 'Test2', 'Value': 'Value'}", "sessionId");
+            }
+
+            _waitHandle1 = new ManualResetEvent(initialState: false);
+
+            await host.StartAsync();
+
+            bool result = _waitHandle1.WaitOne(SBTimeout);
+            Assert.True(result);
+
+            // ensure message are completed
+            await Task.Delay(2000);
+
+            // Wait for the host to terminate
+            await host.StopAsync();
+            host.Dispose();
         }
 
         private async Task Cleanup()
@@ -376,6 +435,79 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        public class ServiceBusMultipleTestJobsBase
+        {
+            protected static bool firstReceived = false;
+            protected static bool secondReceived = false;
+
+            public static void ProcessMessages(string[] messages)
+            {
+                if (messages.Contains("{'Name': 'Test1', 'Value': 'Value'}"))
+                {
+                    firstReceived = true;
+                }
+                if (messages.Contains("{'Name': 'Test2', 'Value': 'Value'}"))
+                {
+                    secondReceived = true;
+                }
+
+                if (firstReceived && secondReceived)
+                {
+                    _waitHandle1.Set();
+                }
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToStringArray
+        {
+
+            public static async Task SBQueue2SBQueue(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] string[] messages,
+                IMessageSession messageSession, CancellationToken cancellationToken)
+            {
+                try
+                {
+                    Assert.Equal(_queueName, messageSession.Path);
+                    ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+                    await Task.Delay(0, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToMessageArray
+        {
+
+            public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message[] array,
+                IMessageSession messageSession)
+            {
+                Assert.Equal(_queueName, messageSession.Path);
+                string[] messages = array.Select(x =>
+                {
+                    using (Stream stream = new MemoryStream(x.Body))
+                    using (TextReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }).ToArray();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_BindToPocoArray
+        {
+            public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] TestPoco[] array,
+                IMessageSession messageSession)
+            {
+                Assert.Equal(_queueName, messageSession.Path);
+                string[] messages = array.Select(x => "{'Name': '" + x.Name + "', 'Value': 'Value'}").ToArray();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
 
         public class CustomMessagingProvider : MessagingProvider
         {
@@ -451,29 +583,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
     {
         private static SessionHandlerOptions sessionHandlerOptions = new SessionHandlerOptions(ExceptionReceivedHandler);
 
-        public static async Task WriteQueueMessage(string connectionString, string queueName, string message, string sessionId = null)
-        {
-            QueueClient queueClient = new QueueClient(connectionString, queueName);
-            Message messageObj = new Message(Encoding.UTF8.GetBytes(message));
-            if (!string.IsNullOrEmpty(sessionId))
-            {
-                messageObj.SessionId = sessionId;
-            }
-            await queueClient.SendAsync(messageObj);
-            await queueClient.CloseAsync();
-        }
-
-        public static async Task WriteTopicMessage(string connectionString, string topicName, string message, string sessionId = null)
-        {
-            TopicClient client = new TopicClient(connectionString, topicName);
-            Message messageObj = new Message(Encoding.UTF8.GetBytes(message));
-            if (!string.IsNullOrEmpty(sessionId))
-            {
-                messageObj.SessionId = sessionId;
-            }
-            await client.SendAsync(messageObj);
-            await client.CloseAsync();
-        }
 
         public static async Task CleanUpQueue(string connectionString, string queueName)
         {
@@ -494,18 +603,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             try
             {
                 session = await client.AcceptMessageSessionAsync();
-                while (true)
-                {
-                    var message = await session.ReceiveAsync(TimeSpan.FromSeconds(5));
-                    if (message != null)
-                    {
-                        await session.CompleteAsync(message.SystemProperties.LockToken);
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
+                var messages = await session.ReceiveAsync(1000, TimeSpan.FromSeconds(5));
+                await session.CompleteAsync(messages.Select(m => m.SystemProperties.LockToken));
             }
             catch (ServiceBusException)
             {
