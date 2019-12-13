@@ -20,6 +20,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         private readonly ConcurrentDictionary<string, MessageReceiver> _messageReceiverCache = new ConcurrentDictionary<string, MessageReceiver>();
         private readonly ConcurrentDictionary<string, MessageSender> _messageSenderCache = new ConcurrentDictionary<string, MessageSender>();
         private readonly ConcurrentDictionary<string, ClientEntity> _clientEntityCache = new ConcurrentDictionary<string, ClientEntity>();
+        private readonly ConcurrentDictionary<string, SessionClient> _sessionClientCache = new ConcurrentDictionary<string, SessionClient>();
 
         /// <summary>
         /// Constructs a new instance.
@@ -120,6 +121,29 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         }
 
         /// <summary>
+        /// Creates a <see cref="SessionClient"/> for the specified ServiceBus entity.
+        /// </summary>
+        /// <remarks>
+        /// You can override this method to customize the <see cref="SessionClient"/>.
+        /// </remarks>
+        /// <param name="entityPath">The ServiceBus entity to create a <see cref="SessionClient"/> for.</param>
+        /// <param name="connectionString">The ServiceBus connection string.</param>
+        /// <returns></returns>
+        public virtual SessionClient CreateSessionClient(string entityPath, string connectionString)
+        {
+            if (string.IsNullOrEmpty(entityPath))
+            {
+                throw new ArgumentNullException("entityPath");
+            }
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                throw new ArgumentNullException("connectionString");
+            }
+
+            return GetOrAddSessionClient(entityPath, connectionString);
+        }
+
+        /// <summary>
         /// Creates a <see cref="SessionMessageProcessor"/> for the specified ServiceBus entity.
         /// </summary>
         /// <param name="entityPath">The ServiceBus entity to create a <see cref="SessionMessageProcessor"/> for.</param>
@@ -177,6 +201,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                     PrefetchCount = _options.PrefetchCount
                 });
             }
+        }
+
+        private SessionClient GetOrAddSessionClient(string entityPath, string connectionString)
+        {
+            string cacheKey = $"{entityPath}-{connectionString}";
+            return _sessionClientCache.GetOrAdd(cacheKey, new SessionClient(connectionString, entityPath));
         }
     }
 }
