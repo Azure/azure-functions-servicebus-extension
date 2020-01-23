@@ -122,7 +122,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
                 var envPrpvider = (test.ImplementationInstance as ConfigurationRoot).Providers
                     .Single(x => x.GetType() == typeof(EnvironmentVariablesConfigurationProvider));
                 envPrpvider.Set("ConnectionStrings:" + Constants.DefaultConnectionStringName, defaultConnectionString);
-                envPrpvider.Set(Constants.DefaultConectionSettingStringName, sefaultConectionSettingString);
+                envPrpvider.Set(Constants.DefaultConnectionSettingStringName, sefaultConectionSettingString);
 
                 b.AddServiceBus();
             }, new Dictionary<string, string>());
