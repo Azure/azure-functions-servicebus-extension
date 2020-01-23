@@ -271,7 +271,21 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                             {
                                 if (result.Succeeded)
                                 {
-                                    await receiver.CompleteAsync(messagesArray.Select(x => x.SystemProperties.LockToken));
+                                    IEnumerable<Task> completionTasks = messagesArray.Select(
+                                        async (message) =>
+                                        {
+                                            try
+                                            {
+                                                await receiver.CompleteAsync(message.SystemProperties.LockToken);
+                                            }
+                                            catch (MessageLockLostException)
+                                            {
+                                                //We consume this exception in case a single message was 
+                                                //abandoned or dead lettered during the batch. 
+                                            }
+                                        });
+                                    //Wait for all the completion Tasks to finish
+                                    await Task.WhenAll(completionTasks);
                                 }
                                 else
                                 {
