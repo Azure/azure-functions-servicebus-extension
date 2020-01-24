@@ -36,6 +36,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private readonly ILogger<ServiceBusListener> _logger;
 
         private Lazy<MessageReceiver> _receiver;
+        private Lazy<SessionClient> _sessionClient;
         private ClientEntity _clientEntity;
         private bool _disposed;
         private bool _started;
@@ -59,6 +60,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<ServiceBusListener>();
             _receiver = CreateMessageReceiver();
+            _sessionClient = CreateSessionClient();
             _scaleMonitor = new Lazy<ServiceBusScaleMonitor>(() => new ServiceBusScaleMonitor(_functionId, _entityType, _entityPath, _serviceBusAccount.ConnectionString, _receiver, _loggerFactory));
             _singleDispatch = singleDispatch;
 
@@ -164,6 +166,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     _receiver = null;
                 }
 
+                if (_sessionClient != null && _sessionClient.IsValueCreated)
+                {
+                    _sessionClient.Value.CloseAsync().Wait();
+                    _sessionClient = null;
+                }
+
                 if (_clientEntity != null)
                 {
                     _clientEntity.CloseAsync().Wait();
@@ -177,6 +185,11 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private Lazy<MessageReceiver> CreateMessageReceiver()
         {
             return new Lazy<MessageReceiver>(() => _messagingProvider.CreateMessageReceiver(_entityPath, _serviceBusAccount.ConnectionString));
+        }
+
+        private Lazy<SessionClient> CreateSessionClient()
+        {
+            return new Lazy<SessionClient>(() => _messagingProvider.CreateSessionClient(_entityPath, _serviceBusAccount.ConnectionString));
         }
 
         internal async Task ProcessMessageAsync(Message message, CancellationToken cancellationToken)
@@ -220,7 +233,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             IMessageReceiver receiver = null;
             if (_isSessionsEnabled)
             {
-                sessionClient = _messagingProvider.CreateSessionClient(_entityPath, _serviceBusAccount.ConnectionString);
+                sessionClient = _sessionClient.Value;
             }
             else
             {
