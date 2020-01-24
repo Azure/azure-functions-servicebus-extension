@@ -47,13 +47,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
                 {
                     return input.GetBody<string>();
                 }
-                catch (Exception exception)
+                catch
                 {
-                    string contentType = input.ContentType ?? "null";
-                    string msg = string.Format(CultureInfo.InvariantCulture, "The Message with ContentType '{0}' failed to deserialize to a string with the message: '{1}'",
-                        contentType, exception.Message);
-
-                    throw new InvalidOperationException(msg, exception);
+                    // always possible to get a valid string from the message
+                    return Encoding.UTF8.GetString(input.Body, 0, input.Body.Length);
                 }
             }
             finally

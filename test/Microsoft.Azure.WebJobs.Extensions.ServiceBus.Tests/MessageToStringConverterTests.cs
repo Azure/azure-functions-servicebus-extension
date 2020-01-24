@@ -64,23 +64,21 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
         }
 
         [Fact]
-        public async Task ConvertAsync_Throws_WithSerializedObject()
+        public async Task ConvertAsync_ReturnsExpectedResult_WithSerializedObject()
         {
 
             byte[] bytes;
             using (MemoryStream ms = new MemoryStream())
             {
-                DataContractBinarySerializer<TestObject>.Instance.WriteObject(ms, new TestObject() { Text = "Test" });
+                DataContractBinarySerializer<TestObject>.Instance.WriteObject(ms, new TestObject() { Text = "Test"});
                 bytes = ms.ToArray();
             }
             
             Message message = new Message(bytes);
 
             MessageToStringConverter converter = new MessageToStringConverter();
-            var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => converter.ConvertAsync(message, CancellationToken.None));
-
-            Assert.IsType<SerializationException>(exception.InnerException);
-            Assert.StartsWith("The Message with ContentType 'null' failed to deserialize to a string with the message:", exception.Message);
+            string result = await converter.ConvertAsync(message, CancellationToken.None);
+            Assert.Equal(Encoding.UTF8.GetString(message.Body), result);
         }
 
         [Serializable]
