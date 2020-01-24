@@ -77,8 +77,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
 
             context
                 .AddConverter<Message, string>(new MessageToStringConverter())
-                .AddConverter<Message, byte[]>(new MessageToByteArrayConverter())
-                .AddOpenConverter<Message, OpenType.Poco>(typeof(MessageToPocoConverter<>));
+                .AddConverter<Message, byte[]>(new MessageToByteArrayConverter());
 
             // register our trigger binding provider
             ServiceBusTriggerAttributeBindingProvider triggerBindingProvider = new ServiceBusTriggerAttributeBindingProvider(_nameResolver, _options, _messagingProvider, _configuration, _loggerFactory, _converterManager);

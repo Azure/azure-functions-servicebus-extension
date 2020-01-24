@@ -3,17 +3,39 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.Serialization;
 using System.Text;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
+using Microsoft.Azure.ServiceBus.InteropExtensions;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Triggers;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
 {
     // Binding strategy for a service bus triggers.
     internal class ServiceBusTriggerBindingStrategy : ITriggerBindingStrategy<Message, ServiceBusTriggerInput>
     {
+        private readonly MethodInfo _saveDataContractAsJson;
+
+        public ServiceBusTriggerBindingStrategy()
+        {
+        }
+
+        public ServiceBusTriggerBindingStrategy(ParameterInfo parameterInfo)
+        {
+            Type type = parameterInfo.ParameterType.IsArray ? parameterInfo.ParameterType.GetElementType() : parameterInfo.ParameterType;
+            if (type != typeof(string) && type != typeof(Message) && type != typeof(byte[]))
+            {
+                MethodInfo method = typeof(ServiceBusTriggerBindingStrategy).GetMethod("SaveDataContractAsJson", BindingFlags.NonPublic | BindingFlags.Static);
+                _saveDataContractAsJson = method.MakeGenericMethod(type);
+            }
+        }
+
         public ServiceBusTriggerInput ConvertFromString(string input)
         {
             byte[] bytes = Encoding.UTF8.GetBytes(input);
@@ -54,6 +76,15 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             var bindingData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             SafeAddValue(() => bindingData.Add(nameof(value.MessageReceiver), value.MessageReceiver as MessageReceiver));
             SafeAddValue(() => bindingData.Add("MessageSession", value.MessageReceiver as IMessageSession));
+
+
+            if (_saveDataContractAsJson != null)
+            {
+                foreach (Message m in value.Messages)
+                {
+                    _saveDataContractAsJson.Invoke(this, new object[] { m });
+                }
+            }
 
             if (value.IsSingleDispatch)
             {
@@ -176,6 +207,24 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             }
 
             contract.Add(name, isSingleDispatch ? type : type.MakeArrayType());
+        }
+
+        private static void SaveDataContractAsJson<T>(Message message)
+        {
+            if (message.ContentType != ContentTypes.ApplicationJson)
+            {
+                T pocoObject;
+                try
+                {
+                    pocoObject = message.GetBody<T>();
+                }
+                catch (SerializationException)
+                {
+                    return;
+                }
+                // Set message body for json desirialization in PocoTriggerArgumentBinding
+                message.Body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(pocoObject));
+            }
         }
     }
 }

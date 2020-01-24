@@ -173,6 +173,35 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>(true);
         }
 
+        [Fact]
+        public async Task UserTypeArgumentTest()
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<ServiceBusArgumentBindingJob>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .Build();
+
+            await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{ 'Value' : '" + SecondQueueName + "' }");
+
+            _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
+
+            await host.StartAsync();
+
+            bool result = _topicSubscriptionCalled1.WaitOne(SBTimeout);
+
+            Assert.True(result);
+
+            // ensure all logs have had a chance to flush
+            await Task.Delay(3000);
+
+            // Wait for the host to terminate
+            await host.StopAsync();
+            host.Dispose();
+        }
+
+
         private async Task TestMultiple<T>(bool isXml = false)
         {
             IHost host = new HostBuilder()
@@ -623,6 +652,17 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 Assert.Equal(FirstQueueName, messageReceiver.Path);
                 string[] messages = array.Select(x => "{'Name': '" + x.Name + "', 'Value': 'Value'}").ToArray();
                 ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
+
+        public class ServiceBusArgumentBindingJob
+        {
+            public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName)] TestPoco input,
+                [ServiceBus("{Value}")] out string output)
+            {
+                output = "test";
+                _topicSubscriptionCalled1.Set();
             }
         }
 
