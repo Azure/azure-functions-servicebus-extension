@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -43,6 +44,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private static EventWaitHandle _topicSubscriptionCalled1;
         private static EventWaitHandle _topicSubscriptionCalled2;
+        private static EventWaitHandle _eventWait;
 
         // These two variables will be checked at the end of the test
         private static string _resultMessage1;
@@ -58,6 +60,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 .AddEnvironmentVariables()
                 .AddTestSettings()
                 .Build();
+
+            _eventWait = new ManualResetEvent(initialState: false);
 
             _primaryConnectionString = config.GetConnectionStringOrSetting(ServiceBus.Constants.DefaultConnectionStringName);
             _secondaryConnectionString = config.GetConnectionStringOrSetting(SecondaryConnectionStringKey);
@@ -173,14 +177,44 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>(true);
         }
 
+        [Fact]
+        public async Task BindToPoco()
+        {
+            var host = BuildTestHost<ServiceBusArgumentBindingJob>();
+
+            await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{ Name: 'foo', Value: 'bar' }");
+
+            await host.StartAsync();
+
+            bool result = _eventWait.WaitOne(SBTimeout);
+            Assert.True(result);
+
+            var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+            Assert.Contains("PocoValues(foo,bar)", logs);
+
+            await host.StopAsync();
+            host.Dispose();
+        }
+
+        [Fact]
+        public async Task BindToString()
+        {
+            var host = BuildTestHost<ServiceBusArgumentBindingJob>();
+
+            var method = typeof(ServiceBusArgumentBindingJob).GetMethod(nameof(ServiceBusArgumentBindingJob.BindToString), BindingFlags.Static | BindingFlags.Public);
+            var jobHost = host.GetJobHost();
+            await jobHost.CallAsync(method, new { input = "foobar" });
+
+            bool result = _eventWait.WaitOne(SBTimeout);
+            Assert.True(result);
+
+            var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+            Assert.Contains("Input(foobar)", logs);
+        }
+
         private async Task TestMultiple<T>(bool isXml = false)
         {
-            IHost host = new HostBuilder()
-               .ConfigureDefaultTestHost<T>(b =>
-               {
-                   b.AddServiceBus();
-               }, nameResolver: _nameResolver)
-               .Build();
+            IHost host = BuildTestHost<T>();
 
             if (isXml)
             {
@@ -213,9 +247,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             var messageReceiver = new MessageReceiver(!string.IsNullOrEmpty(connectionString) ? connectionString : _primaryConnectionString, queueName, ReceiveMode.ReceiveAndDelete);
             Message message;
             int count = 0;
+
             do
             {
-                message = await messageReceiver.ReceiveAsync(TimeSpan.FromSeconds(3)).ConfigureAwait(false);
+                message = await messageReceiver.ReceiveAsync(TimeSpan.FromSeconds(1)).ConfigureAwait(false);
                 if (message != null)
                 {
                     count++;
@@ -225,19 +260,25 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     break;
                 }
             } while (true);
+
             await messageReceiver.CloseAsync();
+
             return count;
         }
 
         private async Task Cleanup()
         {
-            await CleanUpEntity(FirstQueueName);
-            await CleanUpEntity(SecondQueueName);
-            await CleanUpEntity(BinderQueueName);
-            await CleanUpEntity(FirstQueueName, _secondaryConnectionString);
+            var tasks = new List<Task>
+            {
+                CleanUpEntity(FirstQueueName),
+                CleanUpEntity(SecondQueueName),
+                CleanUpEntity(BinderQueueName),
+                CleanUpEntity(FirstQueueName, _secondaryConnectionString),
+                CleanUpEntity(EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName1)),
+                CleanUpEntity(EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName2))
+            };
 
-            await CleanUpEntity(EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName1));
-            await CleanUpEntity(EntityNameHelper.FormatSubscriptionPath(TopicName, TopicSubscriptionName2));
+            await Task.WhenAll(tasks);
         }
 
         private IHost CreateHost<T>()
@@ -626,6 +667,30 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        public class ServiceBusArgumentBindingJob
+        {
+            public static void BindToPoco(
+                [ServiceBusTrigger(FirstQueueName)] TestPoco input,
+                string name, string value, string messageId,
+                ILogger logger)
+            {
+                Assert.Equal(input.Name, name);
+                Assert.Equal(input.Value, value);
+                logger.LogInformation($"PocoValues({name},{value})");
+                _eventWait.Set();
+            }
+
+            [NoAutomaticTrigger]
+            public static void BindToString(
+                [ServiceBusTrigger(FirstQueueName)] string input,
+                string messageId,
+                ILogger logger)
+            {
+                logger.LogInformation($"Input({input})");
+                _eventWait.Set();
+            }
+        }
+
         private class CustomMessagingProvider : MessagingProvider
         {
             public const string CustomMessagingCategory = "CustomMessagingProvider";
@@ -679,6 +744,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             {
                 return Task.CompletedTask;
             }
+        }
+
+        private IHost BuildTestHost<TJobClass>()
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<TJobClass>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .Build();
+
+            return host;
         }
 
         public void Dispose()

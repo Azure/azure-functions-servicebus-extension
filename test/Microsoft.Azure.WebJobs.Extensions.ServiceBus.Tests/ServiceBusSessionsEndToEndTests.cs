@@ -381,10 +381,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private async Task Cleanup()
         {
-            List<Task> tasks = new List<Task>();
-
-            tasks.Add(ServiceBusSessionsTestHelper.CleanUpQueue(_connectionString, _queueName));
-            tasks.Add(ServiceBusSessionsTestHelper.CleanUpSubscription(_connectionString, _topicName, _subscriptionName));
+            var tasks = new List<Task>()
+            {
+                ServiceBusSessionsTestHelper.CleanUpQueue(_connectionString, _queueName),
+                ServiceBusSessionsTestHelper.CleanUpSubscription(_connectionString, _topicName, _subscriptionName)
+            };
 
             await Task.WhenAll(tasks);
         }
@@ -586,15 +587,15 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public static async Task CleanUpQueue(string connectionString, string queueName)
         {
-            await ClenaUpEntity(connectionString, queueName);
+            await CleanUpEntity(connectionString, queueName);
         }
 
         public static async Task CleanUpSubscription(string connectionString, string topicName, string subscriptionName)
         {
-            await ClenaUpEntity(connectionString, EntityNameHelper.FormatSubscriptionPath(topicName, subscriptionName));
+            await CleanUpEntity(connectionString, EntityNameHelper.FormatSubscriptionPath(topicName, subscriptionName));
         }
 
-        private static async Task ClenaUpEntity(string connectionString, string entityPAth)
+        private static async Task CleanUpEntity(string connectionString, string entityPAth)
         {
             var client = new SessionClient(connectionString, entityPAth, ReceiveMode.PeekLock);
             client.OperationTimeout = TimeSpan.FromSeconds(5);
@@ -603,7 +604,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             try
             {
                 session = await client.AcceptMessageSessionAsync();
-                var messages = await session.ReceiveAsync(1000, TimeSpan.FromSeconds(5));
+                var messages = await session.ReceiveAsync(1000, TimeSpan.FromSeconds(1));
                 await session.CompleteAsync(messages.Select(m => m.SystemProperties.LockToken));
             }
             catch (ServiceBusException)
