@@ -83,9 +83,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                     int[] deliveryCounts = new int[length];
                     DateTime[] enqueuedTimes = new DateTime[length];
                     DateTime[] lockedUntils = new DateTime[length];
-                    string sessionId = string.Empty;
+                    string sessionId = Messages[0].SessionId;
 
-                    sessionId = Messages[0].SystemProperties.LockedUntilUtc.ToString();
                     for (int i = 0; i < Messages.Length; i++)
                     {
                         messageIds[i] = Messages[i].MessageId;
