@@ -281,7 +281,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
                             LogBatch("Executing batch", batchHash, count);
                             FunctionResult result = await _triggerExecutor.TryExecuteAsync(input.GetTriggerFunctionData(), cancellationToken);
-                            LogBatch("Executed batch with Succeeded = '{result.Succeeded}'", batchHash, count);
+                            LogBatch($"Executed batch with Succeeded = '{result.Succeeded}'", batchHash, count);
 
                             if (cancellationToken.IsCancellationRequested)
                             {
