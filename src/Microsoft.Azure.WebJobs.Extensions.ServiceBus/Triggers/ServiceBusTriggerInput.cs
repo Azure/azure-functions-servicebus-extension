@@ -85,6 +85,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                     DateTime[] lockedUntils = new DateTime[length];
                     string sessionId = Messages[0].SessionId;
 
+                    string batchHash = Utility.GetMessageBatchHash(Messages);
+
                     for (int i = 0; i < Messages.Length; i++)
                     {
                         messageIds[i] = Messages[i].MessageId;
@@ -99,6 +101,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                         TriggerValue = this,
                         TriggerDetails = new Dictionary<string, string>()
                         {
+                            { "Hash", string.Join(",", batchHash)},
+                            { "Length", string.Join(",", Messages.Length)},
                             { "MessageIdArray", string.Join(",", messageIds)},
                             { "DeliveryCountArray", string.Join(",", deliveryCounts) },
                             { "EnqueuedTimeUtcArray", string.Join(",", enqueuedTimes) },

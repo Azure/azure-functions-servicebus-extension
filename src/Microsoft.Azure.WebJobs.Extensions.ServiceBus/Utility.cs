@@ -2,6 +2,9 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Collections.Generic;
+using System.Text;
+using Microsoft.Azure.ServiceBus;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
 {
@@ -15,6 +18,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         {
             string skuValue = Environment.GetEnvironmentVariable(Constants.AzureWebsiteSku);
             return string.Equals(skuValue, Constants.DynamicSku, StringComparison.OrdinalIgnoreCase) ? 1 : Environment.ProcessorCount;
+        }
+
+        public static string GetMessageBatchHash(IList<Message> messages)
+        {
+            StringBuilder allIds = new StringBuilder();
+            foreach (var message in messages)
+            {
+                allIds.Append(message.MessageId);
+            }
+            return allIds.GetHashCode().ToString().GetHashCode().ToString();
         }
     }
 }

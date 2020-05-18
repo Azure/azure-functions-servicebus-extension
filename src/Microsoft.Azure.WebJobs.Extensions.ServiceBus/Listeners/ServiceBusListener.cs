@@ -255,10 +255,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                         {
                             try
                             {
+                                _logger.LogDebug($"Session accepting..");
                                 receiver = await sessionClient.AcceptMessageSessionAsync();
+                                LogMessageReceiver(receiver, "Session accepted");
                             }
                             catch (ServiceBusTimeoutException)
                             {
+                                _logger.LogDebug($"Session accepting timeout");
                                 // it's expected if the entity is empty, try next time
                                 continue;
                             }
@@ -268,11 +271,17 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
                         if (messages != null)
                         {
+                            string batchHash = Utility.GetMessageBatchHash(messages);
+                            int count = messages.Count;
+
+                            LogBatch("Received batch", batchHash, count);
                             Message[] messagesArray = messages.ToArray();
                             ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateBatch(messagesArray);
                             input.MessageReceiver = receiver;
 
+                            LogBatch("Executing batch", batchHash, count);
                             FunctionResult result = await _triggerExecutor.TryExecuteAsync(input.GetTriggerFunctionData(), cancellationToken);
+                            LogBatch("Executed batch with Succeeded = '{result.Succeeded}'", batchHash, count);
 
                             if (cancellationToken.IsCancellationRequested)
                             {
@@ -284,10 +293,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                             {
                                 if (result.Succeeded)
                                 {
+                                    LogBatch("Completing batch", batchHash, count);
                                     await receiver.CompleteAsync(messagesArray.Select(x => x.SystemProperties.LockToken));
+                                    LogBatch("Completed batch", batchHash, count);
                                 }
                                 else
                                 {
+                                    LogBatch("Abandoning batch", batchHash, count);
                                     // Delivery count is not incremented if 
                                     // Session is accepted, the messages within the session are not completed (even if they are locked), and the session is closed
                                     // https://docs.microsoft.com/en-us/azure/service-bus-messaging/message-sessions#impact-of-delivery-count
@@ -300,13 +312,16 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                                         }
                                         await Task.WhenAll(abandonTasks);
                                     }
+                                    LogBatch("Abandoned batch", batchHash, count);
                                 }
                             }
 
                             // Close the session and release the session lock
                             if (_isSessionsEnabled)
                             {
+                                LogMessageReceiver(receiver, $"Closing session for Batch = '{batchHash}'");
                                 await receiver.CloseAsync();
+                                LogMessageReceiver(receiver, $"Closed session for Batch = '{batchHash}'");
                             }
                         }
                     }
@@ -334,6 +349,19 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         public IScaleMonitor GetMonitor()
         {
             return _scaleMonitor.Value;
+        }
+
+        private void LogMessageReceiver(IMessageReceiver receiver, string message)
+        {
+            if (receiver is IMessageSession messageSession)
+            {
+                _logger.LogDebug($"Message = '{message}', SessionId = '{messageSession.SessionId}', LockedUnitl = '{messageSession.LockedUntilUtc}'");
+            }
+        }
+
+        private void LogBatch(string message, string hash, int length)
+        {
+            _logger.LogDebug($"Message = '{message}', Hash = '{hash}', Length = '{length}'");
         }
     }
 }
