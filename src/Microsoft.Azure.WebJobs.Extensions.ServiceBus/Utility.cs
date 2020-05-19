@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Microsoft.Azure.ServiceBus;
 
@@ -22,12 +23,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
 
         public static string GetMessageBatchHash(IList<Message> messages)
         {
-            StringBuilder allIds = new StringBuilder();
-            foreach (var message in messages)
-            {
-                allIds.Append(message.MessageId);
-            }
-            return allIds.GetHashCode().ToString().GetHashCode().ToString();
+            return string.Join(",", messages.Select(x => x.MessageId)).GetHashCode().ToString();
         }
     }
 }
