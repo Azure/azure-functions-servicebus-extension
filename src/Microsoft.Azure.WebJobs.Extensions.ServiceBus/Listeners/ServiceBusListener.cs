@@ -19,8 +19,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 {
     internal sealed class ServiceBusListener : IListener, IScaleMonitorProvider
     {
-        private const int NumberOfMessagesToReceiveInBatch = 1000;
-
         private readonly MessagingProvider _messagingProvider;
         private readonly ITriggeredFunctionExecutor _triggerExecutor;
         private readonly string _functionId;
@@ -251,11 +249,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                             return;
                         }
 
-                        if (_isSessionsEnabled)
+                        if (_isSessionsEnabled && ( receiver == null || receiver.IsClosedOrClosing))
                         {
                             try
                             {
                                 receiver = await sessionClient.AcceptMessageSessionAsync();
+                                receiver.PrefetchCount = _serviceBusOptions.PrefetchCount;
                             }
                             catch (ServiceBusTimeoutException)
                             {
@@ -302,11 +301,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                                     }
                                 }
                             }
-
-                            // Close the session and release the session lock
-                            if (_isSessionsEnabled)
+                            else
                             {
-                                await receiver.CloseAsync();
+                                // Close the session and release the session lock
+                                if (_isSessionsEnabled)
+                                {
+                                    await receiver.CloseAsync();
+                                }
                             }
                         }
                     }
