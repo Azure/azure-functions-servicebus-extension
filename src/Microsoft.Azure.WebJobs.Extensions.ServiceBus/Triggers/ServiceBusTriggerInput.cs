@@ -67,9 +67,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                         TriggerDetails = new Dictionary<string, string>()
                         {
                             { "MessageId", message.MessageId },
+                            { "SequenceNumber",  message.SystemProperties.SequenceNumber.ToString() },
                             { "DeliveryCount", message.SystemProperties.DeliveryCount.ToString() },
-                            { "EnqueuedTimeUtc", message.SystemProperties.EnqueuedTimeUtc.ToString() },
-                            { "LockedUntilUtc", message.SystemProperties.LockedUntilUtc.ToString() },
+                            { "EnqueuedTimeUtc", message.SystemProperties.EnqueuedTimeUtc.ToUniversalTime().ToString("o") },
+                            { "LockedUntilUtc", message.SystemProperties.LockedUntilUtc.ToUniversalTime().ToString("o") },
                             { "SessionId", message.SessionId }
                         }
                     };
@@ -81,16 +82,18 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                     int length = Messages.Length;
                     string[] messageIds = new string[length];
                     int[] deliveryCounts = new int[length];
-                    DateTime[] enqueuedTimes = new DateTime[length];
-                    DateTime[] lockedUntils = new DateTime[length];
+                    long[] sequenceNumbers = new long[length];
+                    string[] enqueuedTimes = new string[length];
+                    string[] lockedUntils = new string[length];
                     string sessionId = Messages[0].SessionId;
 
                     for (int i = 0; i < Messages.Length; i++)
                     {
                         messageIds[i] = Messages[i].MessageId;
+                        sequenceNumbers[i] = Messages[i].SystemProperties.SequenceNumber;
                         deliveryCounts[i] = Messages[i].SystemProperties.DeliveryCount;
-                        enqueuedTimes[i] = Messages[i].SystemProperties.EnqueuedTimeUtc;
-                        lockedUntils[i] = Messages[i].SystemProperties.LockedUntilUtc;
+                        enqueuedTimes[i] = Messages[i].SystemProperties.EnqueuedTimeUtc.ToUniversalTime().ToString("o");
+                        lockedUntils[i] = Messages[i].SystemProperties.LockedUntilUtc.ToUniversalTime().ToString("o");
                     }
 
                     return new TriggeredFunctionData()
@@ -100,6 +103,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                         TriggerDetails = new Dictionary<string, string>()
                         {
                             { "MessageIdArray", string.Join(",", messageIds)},
+                            { "SequenceNumberArray", string.Join(",", sequenceNumbers)},
                             { "DeliveryCountArray", string.Join(",", deliveryCounts) },
                             { "EnqueuedTimeUtcArray", string.Join(",", enqueuedTimes) },
                             { "LockedUntilArray", string.Join(",", lockedUntils) },
