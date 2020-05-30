@@ -287,27 +287,21 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                                 }
                                 else
                                 {
-                                    // Delivery count is not incremented if 
-                                    // Session is accepted, the messages within the session are not completed (even if they are locked), and the session is closed
-                                    // https://docs.microsoft.com/en-us/azure/service-bus-messaging/message-sessions#impact-of-delivery-count
-                                    if (_isSessionsEnabled)
+                                    List<Task> abandonTasks = new List<Task>();
+                                    foreach (var lockTocken in messagesArray.Select(x => x.SystemProperties.LockToken))
                                     {
-                                        List<Task> abandonTasks = new List<Task>();
-                                        foreach (var lockTocken in messagesArray.Select(x => x.SystemProperties.LockToken))
-                                        {
-                                            abandonTasks.Add(receiver.AbandonAsync(lockTocken));
-                                        }
-                                        await Task.WhenAll(abandonTasks);
+                                        abandonTasks.Add(receiver.AbandonAsync(lockTocken));
                                     }
+                                    await Task.WhenAll(abandonTasks);
                                 }
                             }
-                            else
+                        }
+                        else
+                        {
+                            // Close the session and release the session lock after draining all messages for the accepted session.
+                            if (_isSessionsEnabled)
                             {
-                                // Close the session and release the session lock
-                                if (_isSessionsEnabled)
-                                {
-                                    await receiver.CloseAsync();
-                                }
+                                await receiver.CloseAsync();
                             }
                         }
                     }
@@ -318,7 +312,21 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     catch (Exception ex)
                     {
                         // Log another exception
-                        _logger.LogError($"An unhandled exception occurred in the message batch receive loop: {ex.ToString()}");
+                        _logger.LogError($"An unhandled exception occurred in the message batch receive loop", ex);
+
+                        if (_isSessionsEnabled && receiver != null)
+                        {
+                            // Attempt to close the session and release session lock to accept a new session on the next loop iteration
+                            try
+                            {
+                                await receiver.CloseAsync();
+                            }
+                            catch
+                            {
+                                // Best effort
+                                receiver = null;
+                            }
+                        }
                     }
                 }
             }, cancellationToken);
