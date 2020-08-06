@@ -312,7 +312,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     catch (Exception ex)
                     {
                         // Log another exception
-                        _logger.LogError($"An unhandled exception occurred in the message batch receive loop", ex);
+                        _logger.LogError(ex, $"An unhandled exception occurred in the message batch receive loop");
 
                         if (_isSessionsEnabled && receiver != null)
                         {
