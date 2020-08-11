@@ -124,19 +124,25 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
             }
 
-            // cancel our token source to signal any in progress
-            // ProcessMessageAsync invocations to cancel
-            _cancellationTokenSource.Cancel();
+            // Keep the connections to Service Bus open so in-flight messages can be completed/abandoned.
+            // Graceful stoping/draining is only supported for batch triggers. 
+            // Single dispatch will be supported when Service Bus SDK supports deregistering message/session handlers
+            if (_singleDispatch)
+            {
+                // cancel our token source to signal any in progress
+                // ProcessMessageAsync invocations to cancel
+                _cancellationTokenSource.Cancel();
 
-            if (_receiver != null && _receiver.IsValueCreated)
-            {
-                await Receiver.CloseAsync();
-                _receiver = CreateMessageReceiver();
-            }
-            if (_clientEntity != null)
-            {
-                await _clientEntity.CloseAsync();
-                _clientEntity = null;
+                if (_receiver != null && _receiver.IsValueCreated)
+                {
+                    await Receiver.CloseAsync();
+                    _receiver = CreateMessageReceiver();
+                }
+                if (_clientEntity != null)
+                {
+                    await _clientEntity.CloseAsync();
+                    _clientEntity = null;
+                }
             }
             _started = false;
         }
@@ -246,6 +252,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     {
                         if (!_started || cancellationToken.IsCancellationRequested)
                         {
+                            _logger.LogInformation("Message processing has been stopped or cancelled");
                             return;
                         }
 
