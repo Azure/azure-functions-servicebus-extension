@@ -176,6 +176,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     _clientEntity = null;
                 }
 
+                _cancellationTokenSource.Dispose();
                 _disposed = true;
             }
         }
@@ -192,37 +193,39 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
         internal async Task ProcessMessageAsync(Message message, CancellationToken cancellationToken)
         {
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token);
-
-            if (!await _messageProcessor.BeginProcessingMessageAsync(message, linkedCts.Token))
+            using (CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token))
             {
-                return;
+                if (!await _messageProcessor.BeginProcessingMessageAsync(message, linkedCts.Token))
+                {
+                    return;
+                }
+
+                ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
+                input.MessageReceiver = Receiver;
+
+                TriggeredFunctionData data = input.GetTriggerFunctionData();
+                FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
+                await _messageProcessor.CompleteProcessingMessageAsync(message, result, linkedCts.Token);
             }
-
-            ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
-            input.MessageReceiver = Receiver;
-
-            TriggeredFunctionData data = input.GetTriggerFunctionData();
-            FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
-            await _messageProcessor.CompleteProcessingMessageAsync(message, result, linkedCts.Token);
         }
 
         internal async Task ProcessSessionMessageAsync(IMessageSession session, Message message, CancellationToken cancellationToken)
         {
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token);
-
-            _messageSession = session;
-            if (!await _sessionMessageProcessor.BeginProcessingMessageAsync(session, message, linkedCts.Token))
+            using (CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token))
             {
-                return;
+                _messageSession = session;
+                if (!await _sessionMessageProcessor.BeginProcessingMessageAsync(session, message, linkedCts.Token))
+                {
+                    return;
+                }
+
+                ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
+                input.MessageReceiver = session;
+
+                TriggeredFunctionData data = input.GetTriggerFunctionData();
+                FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
+                await _sessionMessageProcessor.CompleteProcessingMessageAsync(session, message, result, linkedCts.Token);
             }
-
-            ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
-            input.MessageReceiver = session;
-
-            TriggeredFunctionData data = input.GetTriggerFunctionData();
-            FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
-            await _sessionMessageProcessor.CompleteProcessingMessageAsync(session, message, result, linkedCts.Token);
         }
 
         internal void StartMessageBatchReceiver(CancellationToken cancellationToken)
@@ -249,7 +252,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                             return;
                         }
 
-                        if (_isSessionsEnabled && ( receiver == null || receiver.IsClosedOrClosing))
+                        if (_isSessionsEnabled && (receiver == null || receiver.IsClosedOrClosing))
                         {
                             try
                             {
