@@ -38,7 +38,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private ClientEntity _clientEntity;
         private bool _disposed;
         private bool _started;
-        private bool _isStopping;
+        // Serialize execution of StopAsync to avoid calling Unregister* concurrently
+        private readonly SemaphoreSlim _stopAsyncSemaphore = new SemaphoreSlim(1, 1);
 
         private IMessageSession _messageSession;
         private SessionMessageProcessor _sessionMessageProcessor;
@@ -119,52 +120,53 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-
-            if (!_started)
+            await _stopAsyncSemaphore.WaitAsync();
             {
-                throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
-            }
-
-            if (_isStopping)
-            {
-                throw new InvalidOperationException("The listener is currently stopping");
-            }
-
-            // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
-            // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
-            // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
-            // unregistering the message handler so that functions have as long as the host continues to run time to complete.
-            if (_singleDispatch)
-            {
-                _isStopping = true;
-
-                if (_isSessionsEnabled)
+                try
                 {
-                    if (_clientEntity != null)
+                    if (!_started)
                     {
-                        if (_clientEntity is QueueClient queueClient)
+                        throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
+                    }
+
+                    // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
+                    // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
+                    // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
+                    // unregistering the message handler so that functions have as long as the host continues to run time to complete.
+                    if (_singleDispatch)
+                    {
+                        if (_isSessionsEnabled)
                         {
-                            await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                            if (_clientEntity != null)
+                            {
+                                if (_clientEntity is QueueClient queueClient)
+                                {
+                                    await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                }
+                                else
+                                {
+                                    SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
+                                    await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                }
+                            }
                         }
                         else
                         {
-                            SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
-                            await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                            if (_receiver != null && _receiver.IsValueCreated)
+                            {
+                                await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
+                            }
                         }
                     }
+                    // Batch processing will be stopped via the _started flag on its next iteration
+
+                    _started = false;
                 }
-                else
+                finally
                 {
-                    if (_receiver != null && _receiver.IsValueCreated)
-                    {
-                        await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
-                    }
+                    _stopAsyncSemaphore.Release();
                 }
             }
-            // Batch processing will be stopped via the _started flag on its next iteration
-
-            _isStopping = false;
-            _started = false;
         }
 
         public void Cancel()
@@ -201,6 +203,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     _clientEntity.CloseAsync().Wait();
                     _clientEntity = null;
                 }
+
+                _stopAsyncSemaphore.Dispose();
 
                 _disposed = true;
             }

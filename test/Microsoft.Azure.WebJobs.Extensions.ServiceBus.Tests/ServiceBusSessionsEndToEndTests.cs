@@ -39,6 +39,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
         private readonly string _connectionString;
 
+        private const string DrainingQueueMessageBody = "queue-message-draining-with-sessions-1";
+        private const string DrainingTopicMessageBody = "topic-message-draining-with-sessions-1";
+
         public ServiceBusSessionsBusEndToEndTests()
         {
             var config = new ConfigurationBuilder()
@@ -388,12 +391,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             if (sendToQueue)
             {
                 await ServiceBusEndToEndTests.WriteQueueMessage(
-                    _connectionString, _queueName, "queue-message-draining-with-sessions-1", _drainModeSessionId);
+                    _connectionString, _queueName, DrainingQueueMessageBody, _drainModeSessionId);
             }
             else
             {
                 await ServiceBusEndToEndTests.WriteTopicMessage(
-                    _connectionString, _topicName, "topic-message-draining-with-sessions-1", _drainModeSessionId);
+                    _connectionString, _topicName, DrainingTopicMessageBody, _drainModeSessionId);
             }
 
             // Wait to ensure function invocatoin has started before draining messages

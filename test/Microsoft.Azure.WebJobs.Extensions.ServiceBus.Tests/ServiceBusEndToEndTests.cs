@@ -39,6 +39,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const string TopicSubscriptionName2 = "sub2";
 
         private const string TriggerDetailsMessageStart = "Trigger Details:";
+        private const string DrainingQueueMessageBody = "queue-message-draining-no-sessions-1";
+        private const string DrainingTopicMessageBody = "topic-message-draining-no-sessions-1";
 
         private const int SBTimeout = 120 * 1000;
         private const int DrainSleepTime = 60 * 1000;
@@ -266,11 +268,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             if (sendToQueue)
             {
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "queue-message-draining-no-sessions-1");
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, DrainingQueueMessageBody);
             }
             else
             {
-                await WriteTopicMessage(_primaryConnectionString, TopicName, "topic-message-draining-no-sessions-1");
+                await WriteTopicMessage(_primaryConnectionString, TopicName, DrainingTopicMessageBody);
             }
 
             // Wait to ensure function invocatoin has started before draining messages
