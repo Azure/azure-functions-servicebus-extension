@@ -40,11 +40,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private const string TriggerDetailsMessageStart = "Trigger Details:";
 
-        private const int SBTimeout = 60 * 1000;
+        private const int SBTimeout = 120 * 1000;
+        private const int DrainSleepTime = 60 * 1000;
+        private const int MaxAutoRenewDurationMin = 5;
+        internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
 
         private static EventWaitHandle _topicSubscriptionCalled1;
         private static EventWaitHandle _topicSubscriptionCalled2;
         private static EventWaitHandle _eventWait;
+        private static EventWaitHandle _drainValidationPreDelay;
+        private static EventWaitHandle _drainValidationPostDelay;
 
         // These two variables will be checked at the end of the test
         private static string _resultMessage1;
@@ -108,6 +113,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     services.AddSingleton<MessagingProvider, CustomMessagingProvider>();
                 })
+                .ConfigureServices(s =>
+                {
+                    s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+                })
                 .Build();
 
             var loggerProvider = host.GetTestLoggerProvider();
@@ -133,15 +142,21 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                {
                    services.AddSingleton<MessagingProvider, CustomMessagingProvider>();
                })
+               .ConfigureServices(s =>
+               {
+                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+               })
                .Build();
 
             await WriteQueueMessage(_secondaryConnectionString, FirstQueueName, "Test");
 
             _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
+            _topicSubscriptionCalled2 = new ManualResetEvent(initialState: false);
 
             await host.StartAsync();
 
             _topicSubscriptionCalled1.WaitOne(SBTimeout);
+            _topicSubscriptionCalled2.WaitOne(SBTimeout);
 
             // ensure all logs have had a chance to flush
             await Task.Delay(3000);
@@ -150,7 +165,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await host.StopAsync();
             host.Dispose();
 
-            Assert.Equal("Test-topic-1", _resultMessage1);
+            Assert.Equal("Test-SBQueue2SBQueue-SBQueue2SBTopic-topic-1", _resultMessage1);
+            Assert.Equal("Test-SBQueue2SBQueue-SBQueue2SBTopic-topic-2", _resultMessage2);
         }
 
         [Fact]
@@ -212,6 +228,65 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             Assert.Contains("Input(foobar)", logs);
         }
 
+        [Fact]
+        public async Task MessageDrainingQueue()
+        {
+            await TestSingleDrainMode<DrainModeValidationFunctions>(true);
+        }
+
+        [Fact]
+        public async Task MessageDrainingTopic()
+        {
+            await TestSingleDrainMode<DrainModeValidationFunctions>(false);
+        }
+
+        [Fact]
+        public async Task MessageDrainingQueueBatch()
+        {
+            await TestMultipleDrainMode<DrainModeValidationFunctions>(true);
+        }
+
+        [Fact]
+        public async Task MessageDrainingTopicBatch()
+        {
+            await TestMultipleDrainMode<DrainModeValidationFunctions>(false);
+        }
+
+        /*
+         * Helper functions
+         */
+
+        private async Task TestSingleDrainMode<T>(bool sendToQueue)
+        {
+            var host = BuildTestHost<DrainModeValidationFunctions>();
+            await host.StartAsync();
+
+            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+            if (sendToQueue)
+            {
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "queue-message-draining-no-sessions-1");
+            }
+            else
+            {
+                await WriteTopicMessage(_primaryConnectionString, TopicName, "topic-message-draining-no-sessions-1");
+            }
+
+            // Wait to ensure function invocatoin has started before draining messages
+            Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+
+            // Start draining in-flight messages
+            var drainModeManager = host.Services.GetService<IDrainModeManager>();
+            await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+            // Validate that function execution was allowed to complete
+            Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
+
+            await host.StopAsync();
+            host.Dispose();
+        }
+
         private async Task TestMultiple<T>(bool isXml = false)
         {
             IHost host = BuildTestHost<T>();
@@ -236,6 +311,50 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             // ensure message are completed
             await Task.Delay(2000);
+
+            // Wait for the host to terminate
+            await host.StopAsync();
+            host.Dispose();
+        }
+
+        private async Task TestMultipleDrainMode<T>(bool sendToQueue)
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<T>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .ConfigureServices(s =>
+               {
+                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+               })
+               .Build();
+
+            await host.StartAsync();
+
+            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+            if (sendToQueue)
+            {
+                await ServiceBusEndToEndTests.WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test1', 'Value': 'Value'}");
+                await ServiceBusEndToEndTests.WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test2', 'Value': 'Value'}");
+            }
+            else
+            {
+                await ServiceBusEndToEndTests.WriteTopicMessage(_primaryConnectionString, TopicName, "{'Name': 'Test1', 'Value': 'Value'}");
+                await ServiceBusEndToEndTests.WriteTopicMessage(_primaryConnectionString, TopicName, "{'Name': 'Test2', 'Value': 'Value'}");
+            }
+
+            // Wait to ensure function invocatoin has started before draining messages
+            Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+
+            // Start draining in-flight messages
+            var drainModeManager = host.Services.GetService<IDrainModeManager>();
+            await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+            // Validate that function execution was allowed to complete
+            Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
 
             // Wait for the host to terminate
             await host.StopAsync();
@@ -291,6 +410,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 .ConfigureServices(services =>
                 {
                     services.AddSingleton<INameResolver>(_nameResolver);
+                })
+                .ConfigureServices(s =>
+                {
+                    s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
                 })
                 .Build();
         }
@@ -691,6 +814,33 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        public class DrainModeValidationFunctions
+        {
+            public async static void QueueNoSessions(
+                [ServiceBusTrigger(FirstQueueName)] Message msg,
+                string messageId,
+                ILogger logger)
+            {
+                logger.LogInformation($"DrainModeValidationFunctions.QueueNoSessions: message data {msg.Body}");
+                _drainValidationPreDelay.Set();
+                // Simulate a long running function execution to validate that drain invocation allows this to complete
+                await Task.Delay(DrainSleepTime);
+                _drainValidationPostDelay.Set();
+            }
+
+            public async static void TopicNoSessions(
+                [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message msg,
+                string messageId,
+                ILogger logger)
+            {
+                logger.LogInformation($"DrainModeValidationFunctions.NoSessions: message data {msg.Body}");
+                _drainValidationPreDelay.Set();
+                // Simulate a long running function execution to validate that drain invocation allows this to complete
+                await Task.Delay(DrainSleepTime);
+                _drainValidationPostDelay.Set();
+            }
+        }
+
         private class CustomMessagingProvider : MessagingProvider
         {
             public const string CustomMessagingCategory = "CustomMessagingProvider";
@@ -709,7 +859,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 var options = new MessageHandlerOptions(ExceptionReceivedHandler)
                 {
                     MaxConcurrentCalls = 3,
-                    MaxAutoRenewDuration = TimeSpan.FromMinutes(1)
+                    MaxAutoRenewDuration = TimeSpan.FromMinutes(MaxAutoRenewDurationMin)
                 };
 
                 var messageReceiver = new MessageReceiver(_options.ConnectionString, entityPath);
@@ -753,6 +903,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                {
                    b.AddServiceBus();
                }, nameResolver: _nameResolver)
+               .ConfigureServices(s =>
+               {
+                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+               })
                .Build();
 
             return host;

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -6,7 +6,7 @@
     <RootNamespace>Microsoft.Azure.WebJobs.ServiceBus</RootNamespace>
     <PackageId>Microsoft.Azure.WebJobs.Extensions.ServiceBus</PackageId>
     <Description>Microsoft Azure WebJobs SDK ServiceBus Extension</Description>
-    <Version>4.1.2</Version>
+    <Version>4.2.0$(VersionSuffix)</Version>
     <CommitHash Condition="$(CommitHash) == ''">N/A</CommitHash>
     <InformationalVersion>$(Version) Commit hash: $(CommitHash)</InformationalVersion>
     <Authors>Microsoft</Authors>
@@ -29,6 +29,7 @@
     <StyleCopTreatErrorsAsWarnings>false</StyleCopTreatErrorsAsWarnings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <WarningsAsErrors />
+    <NoWarn>1701;1702;NU5125;NU5048</NoWarn>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
@@ -38,9 +39,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Azure.ServiceBus" Version="4.1.1" />
-    <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.16" />
-    <PackageReference Include="Microsoft.Azure.WebJobs.Sources" Version="3.0.16" />
+    <PackageReference Include="Microsoft.Azure.ServiceBus" Version="4.2.0" />
+    <PackageReference Include="Microsoft.Azure.WebJobs" Version="3.0.19" />
+    <PackageReference Include="Microsoft.Azure.WebJobs.Sources" Version="3.0.19" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.1.0-beta004">
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>

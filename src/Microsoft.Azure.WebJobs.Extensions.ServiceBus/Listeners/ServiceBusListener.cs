@@ -38,6 +38,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private ClientEntity _clientEntity;
         private bool _disposed;
         private bool _started;
+        private bool _isStopping;
 
         private IMessageSession _messageSession;
         private SessionMessageProcessor _sessionMessageProcessor;
@@ -124,26 +125,45 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
             }
 
-            // Keep the connections to Service Bus open so in-flight messages can be completed/abandoned.
-            // Graceful stoping/draining is only supported for batch triggers. 
-            // Single dispatch will be supported when Service Bus SDK supports deregistering message/session handlers
+            if (_isStopping)
+            {
+                throw new InvalidOperationException("The listener is currently stopping");
+            }
+
+            // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
+            // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
+            // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
+            // unregistering the message handler so that functions have as long as the host continues to run time to complete.
             if (_singleDispatch)
             {
-                // cancel our token source to signal any in progress
-                // ProcessMessageAsync invocations to cancel
-                _cancellationTokenSource.Cancel();
+                _isStopping = true;
 
-                if (_receiver != null && _receiver.IsValueCreated)
+                if (_isSessionsEnabled)
                 {
-                    await Receiver.CloseAsync();
-                    _receiver = CreateMessageReceiver();
+                    if (_clientEntity != null)
+                    {
+                        if (_clientEntity is QueueClient queueClient)
+                        {
+                            await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                        }
+                        else
+                        {
+                            SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
+                            await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                        }
+                    }
                 }
-                if (_clientEntity != null)
+                else
                 {
-                    await _clientEntity.CloseAsync();
-                    _clientEntity = null;
+                    if (_receiver != null && _receiver.IsValueCreated)
+                    {
+                        await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
+                    }
                 }
             }
+            // Batch processing will be stopped via the _started flag on its next iteration
+
+            _isStopping = false;
             _started = false;
         }
 
