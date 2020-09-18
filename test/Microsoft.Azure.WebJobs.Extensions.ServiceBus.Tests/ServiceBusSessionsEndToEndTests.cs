@@ -19,6 +19,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
@@ -29,6 +30,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const string _topicName = _prefix + "topic1-sessions";
         private const string _subscriptionName = "sub1-sessions";
         private const string _drainModeSessionId = "drain-session";
+        private const string DrainingQueueMessageBody = "queue-message-draining-with-sessions-1";
+        private const string DrainingTopicMessageBody = "topic-message-draining-with-sessions-1";
         private static EventWaitHandle _waitHandle1;
         private static EventWaitHandle _waitHandle2;
         private static EventWaitHandle _drainValidationPreDelay;
@@ -39,16 +42,22 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
         private readonly string _connectionString;
 
-        private const string DrainingQueueMessageBody = "queue-message-draining-with-sessions-1";
-        private const string DrainingTopicMessageBody = "topic-message-draining-with-sessions-1";
+        private readonly ITestOutputHelper outputLogger;
 
-        public ServiceBusSessionsBusEndToEndTests()
+        public ServiceBusSessionsBusEndToEndTests(ITestOutputHelper output)
         {
+            outputLogger = output;
+
             var config = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
                 .AddTestSettings()
                 .Build();
 
+            // Add all test configuration to the environment as WebJobs requires a few of them to be in the environment
+            foreach (var kv in config.AsEnumerable())
+            {
+                Environment.SetEnvironmentVariable(kv.Key, kv.Value);
+            }
             _connectionString = config.GetConnectionStringOrSetting(ServiceBus.Constants.DefaultConnectionStringName);
 
             _nameResolver = new RandomNameResolver();
@@ -355,25 +364,25 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task MessageDraining_QueueWithSessions()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(true);
+            await TestSingleDrainMode<DrainModeTestJobSingleDispatch>(true);
         }
 
         [Fact]
         public async Task MessageDraining_TopicWithSessions()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(false);
+            await TestSingleDrainMode<DrainModeTestJobSingleDispatch>(false);
         }
 
         [Fact]
         public async Task MessageDraining_QueueWithSessions_Batch()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(true);
+            await TestMultipleDrainMode<DrainModeTestJobBatch>(true);
         }
 
         [Fact]
         public async Task MessageDraining_TopicWithSessions_Batch()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(false);
+            await TestMultipleDrainMode<DrainModeTestJobBatch>(false);
         }
 
         /*
@@ -382,9 +391,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private async Task TestSingleDrainMode<T>(bool sendToQueue)
         {
-            var host = ServiceBusSessionsTestHelper.CreateHost<DrainModeValidationFunctions>(_nameResolver);
-            await host.StartAsync();
-
             _drainValidationPreDelay = new ManualResetEvent(initialState: false);
             _drainValidationPostDelay = new ManualResetEvent(initialState: false);
 
@@ -398,6 +404,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteTopicMessage(
                     _connectionString, _topicName, DrainingTopicMessageBody, _drainModeSessionId);
             }
+
+            var host = ServiceBusSessionsTestHelper.CreateHost<T>(_nameResolver);
+            await host.StartAsync();
 
             // Wait to ensure function invocatoin has started before draining messages
             Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
@@ -413,18 +422,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             host.Dispose();
         }
 
-            private async Task TestMultiple<T>(bool isXml = false)
+        private async Task TestMultiple<T>(bool isXml = false)
         {
-            IHost host = new HostBuilder()
-               .ConfigureDefaultTestHost<T>(b =>
-               {
-                   b.AddServiceBus();
-               }, nameResolver: _nameResolver)
-               .ConfigureServices(s =>
-               {
-                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
-               })
-               .Build();
+            _waitHandle1 = new ManualResetEvent(initialState: false);
 
             if (isXml)
             {
@@ -437,8 +437,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "{'Name': 'Test2', 'Value': 'Value'}", "sessionId");
             }
 
-            _waitHandle1 = new ManualResetEvent(initialState: false);
-
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<T>(b =>
+               {
+                   b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .ConfigureServices(s =>
+               {
+                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+               })
+               .Build();
             await host.StartAsync();
 
             bool result = _waitHandle1.WaitOne(SBTimeout);
@@ -454,19 +462,6 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private async Task TestMultipleDrainMode<T>(bool sendToQueue)
         {
-            IHost host = new HostBuilder()
-               .ConfigureDefaultTestHost<T>(b =>
-               {
-                   b.AddServiceBus();
-               }, nameResolver: _nameResolver)
-               .ConfigureServices(s =>
-               {
-                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
-               })
-               .Build();
-
-            await host.StartAsync();
-
             _drainValidationPreDelay = new ManualResetEvent(initialState: false);
             _drainValidationPostDelay = new ManualResetEvent(initialState: false);
 
@@ -480,6 +475,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "{'Name': 'Test1', 'Value': 'Value'}", _drainModeSessionId);
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "{'Name': 'Test2', 'Value': 'Value'}", _drainModeSessionId);
             }
+
+            IHost host = new HostBuilder()
+            .ConfigureDefaultTestHost<T>(b =>
+            {
+                b.AddServiceBus();
+            }, nameResolver: _nameResolver)
+            .ConfigureServices(s =>
+            {
+                s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+            })
+            .Build();
+            await host.StartAsync();
 
             // Wait to ensure function invocatoin has started before draining messages
             Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
@@ -553,38 +560,42 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        public class DrainModeValidationFunctions
+        public class DrainModeTestJobSingleDispatch
         {
             public async static void QueueWithSessions(
-                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message msg, 
-                string sessionId, string messageId, ILogger logger)
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message msg,
+                ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.QueueWithSessions: message data {msg.Body} with session id {msg.SessionId}");
+                Assert.Equal(_drainModeSessionId, msg.SessionId);
                 _drainValidationPreDelay.Set();
-                Assert.Equal(msg.SessionId, _drainModeSessionId);
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
                 _drainValidationPostDelay.Set();
             }
 
             public async static void TopicWithSessions(
-                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message msg, 
-                string sessionId, string messageId,  ILogger logger)
+                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message msg,
+                ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.TopicWithSessions: message data {msg.Body} with session id {msg.SessionId}");
                 _drainValidationPreDelay.Set();
-                Assert.Equal(msg.SessionId, _drainModeSessionId);
+                Assert.Equal(_drainModeSessionId, msg.SessionId);
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
                 _drainValidationPostDelay.Set();
             }
+        }
 
+        public class DrainModeTestJobBatch
+        {
             public async static void QueueWithSessionsBatch(
                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message[] array,
-               IMessageSession messageSession)
+               ILogger logger)
             {
-                Assert.Equal(_queueName, messageSession.Path);
-                Assert.Equal(_drainModeSessionId, messageSession.SessionId);
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeValidationFunctions.QueueWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
+                Assert.Equal(_drainModeSessionId, array[0].SessionId);
                 _drainValidationPreDelay.Set();
                 string[] messages = array.Select(x =>
                 {
@@ -594,18 +605,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         return reader.ReadToEnd();
                     }
                 }).ToArray();
-                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
-                _drainValidationPostDelay.Set();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages, _drainValidationPostDelay);
             }
 
             public async static void TopicWithSessionsBatch(
                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message[] array,
-               IMessageSession messageSession)
+               ILogger logger)
             {
-                Assert.Equal(_queueName, messageSession.Path);
-                Assert.Equal(_drainModeSessionId, messageSession.SessionId);
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeValidationFunctions.TopicWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
+                Assert.Equal(_drainModeSessionId, array[0].SessionId);
                 _drainValidationPreDelay.Set();
                 string[] messages = array.Select(x =>
                 {
@@ -615,10 +626,9 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         return reader.ReadToEnd();
                     }
                 }).ToArray();
-                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
-                _drainValidationPostDelay.Set();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages, _drainValidationPostDelay);
             }
         }
 

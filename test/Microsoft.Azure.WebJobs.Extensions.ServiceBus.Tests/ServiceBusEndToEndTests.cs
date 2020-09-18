@@ -22,6 +22,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
@@ -61,12 +62,22 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private readonly string _primaryConnectionString;
         private readonly string _secondaryConnectionString;
 
-        public ServiceBusEndToEndTests()
+        private readonly ITestOutputHelper outputLogger;
+
+        public ServiceBusEndToEndTests(ITestOutputHelper output)
         {
+            outputLogger = output;
+
             var config = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
                 .AddTestSettings()
                 .Build();
+
+            // Add all test configuration to the environment as WebJobs requires a few of them to be in the environment
+            foreach (var kv in config.AsEnumerable())
+            {
+                Environment.SetEnvironmentVariable(kv.Key, kv.Value);
+            }
 
             _eventWait = new ManualResetEvent(initialState: false);
 
@@ -167,8 +178,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await host.StopAsync();
             host.Dispose();
 
-            Assert.Equal("Test-SBQueue2SBQueue-SBQueue2SBTopic-topic-1", _resultMessage1);
-            Assert.Equal("Test-SBQueue2SBQueue-SBQueue2SBTopic-topic-2", _resultMessage2);
+            Assert.Equal("Test-topic-1", _resultMessage1);
+            Assert.Equal("Test-topic-2", _resultMessage2);
         }
 
         [Fact]
@@ -475,21 +486,31 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     $"{jobContainerType.FullName}.SBTopicListener2",
                     $"{jobContainerType.FullName}.ServiceBusBinderTest",
                     "Job host started",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBQueue' (Reason='', Id=",
+                    $"Executing '{jobContainerType.Name}.SBQueue2SBQueue'",
                     $"Executed '{jobContainerType.Name}.SBQueue2SBQueue' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBTopic' (Reason='', Id=",
+                    $"Executing '{jobContainerType.Name}.SBQueue2SBTopic'",
                     $"Executed '{jobContainerType.Name}.SBQueue2SBTopic' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener1' (Reason='', Id=",
+                    $"Executing '{jobContainerType.Name}.SBTopicListener1'",
                     $"Executed '{jobContainerType.Name}.SBTopicListener1' (Succeeded, Id=",
                     $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener2' (Reason='', Id=",
+                    $"Executing '{jobContainerType.Name}.SBTopicListener2'",
                     $"Executed '{jobContainerType.Name}.SBTopicListener2' (Succeeded, Id=",
                     $"Trigger Details:",
                     "Job host stopped",
                     "Starting JobHost",
                     "Stopping JobHost",
+                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
+                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
+                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
+                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
+                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
+                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
+                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
+                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
+                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
+                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
                     "FunctionResultAggregatorOptions",
                     "{",
                     "  \"BatchSize\": 1000",
