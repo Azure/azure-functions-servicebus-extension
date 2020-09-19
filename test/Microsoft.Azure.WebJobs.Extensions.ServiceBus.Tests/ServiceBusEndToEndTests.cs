@@ -47,6 +47,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const int DrainSleepTime = 60 * 1000;
         private const int MaxAutoRenewDurationMin = 5;
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
+        internal static TimeSpan MaxAutoRenewDuration = TimeSpan.FromSeconds(300);
 
         private static EventWaitHandle _topicSubscriptionCalled1;
         private static EventWaitHandle _topicSubscriptionCalled2;
@@ -99,25 +100,29 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         public async Task ServiceBusBinderTest()
         {
             var hostType = typeof(ServiceBusTestJobs);
-            var host = CreateHost<ServiceBusTestJobs>();
-            var method = typeof(ServiceBusTestJobs).GetMethod("ServiceBusBinderTest");
+            using (IHost host = CreateHost<ServiceBusTestJobs>())
+            {
+                var method = typeof(ServiceBusTestJobs).GetMethod("ServiceBusBinderTest");
 
-            int numMessages = 10;
-            var args = new { message = "Test Message", numMessages = numMessages };
-            var jobHost = host.GetJobHost<ServiceBusTestJobs>();
-            await jobHost.CallAsync(method, args);
-            await jobHost.CallAsync(method, args);
-            await jobHost.CallAsync(method, args);
+                int numMessages = 10;
+                var args = new { message = "Test Message", numMessages = numMessages };
+                var jobHost = host.GetJobHost<ServiceBusTestJobs>();
+                await jobHost.CallAsync(method, args);
+                await jobHost.CallAsync(method, args);
+                await jobHost.CallAsync(method, args);
 
-            var count = await CleanUpEntity(BinderQueueName);
+                var count = await CleanUpEntity(BinderQueueName);
 
-            Assert.Equal(numMessages * 3, count);
+                Assert.Equal(numMessages * 3, count);
+
+                await host.StopAsync();
+            }
         }
 
         [Fact]
         public async Task CustomMessageProcessorTest()
         {
-            IHost host = new HostBuilder()
+            using (IHost host = new HostBuilder()
                 .ConfigureDefaultTestHost<ServiceBusTestJobs>(b =>
                 {
                     b.AddServiceBus();
@@ -130,23 +135,24 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
                 })
-                .Build();
+                .Build())
+            {
+                var loggerProvider = host.GetTestLoggerProvider();
 
-            var loggerProvider = host.GetTestLoggerProvider();
+                await ServiceBusEndToEndInternal<ServiceBusTestJobs>(host: host);
 
-            await ServiceBusEndToEndInternal<ServiceBusTestJobs>(host: host);
-
-            // in addition to verifying that our custom processor was called, we're also
-            // verifying here that extensions can log
-            IEnumerable<LogMessage> messages = loggerProvider.GetAllLogMessages().Where(m => m.Category == CustomMessagingProvider.CustomMessagingCategory);
-            Assert.Equal(4, messages.Count(p => p.FormattedMessage.Contains("Custom processor Begin called!")));
-            Assert.Equal(4, messages.Count(p => p.FormattedMessage.Contains("Custom processor End called!")));
+                // in addition to verifying that our custom processor was called, we're also
+                // verifying here that extensions can log
+                IEnumerable<LogMessage> messages = loggerProvider.GetAllLogMessages().Where(m => m.Category == CustomMessagingProvider.CustomMessagingCategory);
+                Assert.Equal(4, messages.Count(p => p.FormattedMessage.Contains("Custom processor Begin called!")));
+                Assert.Equal(4, messages.Count(p => p.FormattedMessage.Contains("Custom processor End called!")));
+            }
         }
 
         [Fact]
         public async Task MultipleAccountTest()
         {
-            IHost host = new HostBuilder()
+            using (IHost host = new HostBuilder()
                .ConfigureDefaultTestHost<ServiceBusTestJobs>(b =>
                {
                    b.AddServiceBus();
@@ -159,24 +165,24 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                {
                    s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
                })
-               .Build();
+               .Build())
+            {
+                await WriteQueueMessage(_secondaryConnectionString, FirstQueueName, "Test");
 
-            await WriteQueueMessage(_secondaryConnectionString, FirstQueueName, "Test");
+                _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
+                _topicSubscriptionCalled2 = new ManualResetEvent(initialState: false);
 
-            _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
-            _topicSubscriptionCalled2 = new ManualResetEvent(initialState: false);
+                await host.StartAsync();
 
-            await host.StartAsync();
+                _topicSubscriptionCalled1.WaitOne(SBTimeout);
+                _topicSubscriptionCalled2.WaitOne(SBTimeout);
 
-            _topicSubscriptionCalled1.WaitOne(SBTimeout);
-            _topicSubscriptionCalled2.WaitOne(SBTimeout);
+                // ensure all logs have had a chance to flush
+                await Task.Delay(3000);
 
-            // ensure all logs have had a chance to flush
-            await Task.Delay(3000);
-
-            // Wait for the host to terminate
-            await host.StopAsync();
-            host.Dispose();
+                // Wait for the host to terminate
+                await host.StopAsync();
+            }
 
             Assert.Equal("Test-topic-1", _resultMessage1);
             Assert.Equal("Test-topic-2", _resultMessage2);
@@ -209,60 +215,63 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         [Fact]
         public async Task BindToPoco()
         {
-            var host = BuildTestHost<ServiceBusArgumentBindingJob>();
+            using (IHost host = BuildTestHost<ServiceBusArgumentBindingJob>())
+            {
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{ Name: 'foo', Value: 'bar' }");
 
-            await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{ Name: 'foo', Value: 'bar' }");
+                await host.StartAsync();
 
-            await host.StartAsync();
+                bool result = _eventWait.WaitOne(SBTimeout);
+                Assert.True(result);
 
-            bool result = _eventWait.WaitOne(SBTimeout);
-            Assert.True(result);
+                var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+                Assert.Contains("PocoValues(foo,bar)", logs);
 
-            var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
-            Assert.Contains("PocoValues(foo,bar)", logs);
-
-            await host.StopAsync();
-            host.Dispose();
+                await host.StopAsync();
+            }
         }
 
         [Fact]
         public async Task BindToString()
         {
-            var host = BuildTestHost<ServiceBusArgumentBindingJob>();
+            using (IHost host = BuildTestHost<ServiceBusArgumentBindingJob>())
+            {
+                var method = typeof(ServiceBusArgumentBindingJob).GetMethod(nameof(ServiceBusArgumentBindingJob.BindToString), BindingFlags.Static | BindingFlags.Public);
+                var jobHost = host.GetJobHost();
+                await jobHost.CallAsync(method, new { input = "foobar" });
 
-            var method = typeof(ServiceBusArgumentBindingJob).GetMethod(nameof(ServiceBusArgumentBindingJob.BindToString), BindingFlags.Static | BindingFlags.Public);
-            var jobHost = host.GetJobHost();
-            await jobHost.CallAsync(method, new { input = "foobar" });
+                bool result = _eventWait.WaitOne(SBTimeout);
+                Assert.True(result);
 
-            bool result = _eventWait.WaitOne(SBTimeout);
-            Assert.True(result);
+                var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
+                Assert.Contains("Input(foobar)", logs);
 
-            var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
-            Assert.Contains("Input(foobar)", logs);
+                await host.StopAsync();
+            }
         }
 
         [Fact]
         public async Task MessageDrainingQueue()
         {
-            await TestSingleDrainMode<DrainModeValidationFunctions>(true);
+            await TestSingleDrainMode<DrainModeTestJobQueue>(true);
         }
 
         [Fact]
         public async Task MessageDrainingTopic()
         {
-            await TestSingleDrainMode<DrainModeValidationFunctions>(false);
+            await TestSingleDrainMode<DrainModeTestJobTopic>(false);
         }
 
         [Fact]
         public async Task MessageDrainingQueueBatch()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(true);
+            await TestMultipleDrainMode<DrainModeTestJobQueueBatch>(true);
         }
 
         [Fact]
         public async Task MessageDrainingTopicBatch()
         {
-            await TestMultipleDrainMode<DrainModeValidationFunctions>(false);
+            await TestMultipleDrainMode<DrainModeTestJobTopicBatch>(false);
         }
 
         /*
@@ -271,107 +280,97 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private async Task TestSingleDrainMode<T>(bool sendToQueue)
         {
-            var host = BuildTestHost<DrainModeValidationFunctions>();
-            await host.StartAsync();
-
-            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
-            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
-
-            if (sendToQueue)
+            using (IHost host = BuildTestHostMessageDraining<T>())
             {
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, DrainingQueueMessageBody);
+                await host.StartAsync();
+
+                _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+                _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+                if (sendToQueue)
+                {
+                    await WriteQueueMessage(_primaryConnectionString, FirstQueueName, DrainingQueueMessageBody);
+                }
+                else
+                {
+                    await WriteTopicMessage(_primaryConnectionString, TopicName, DrainingTopicMessageBody);
+                }
+
+                // Wait to ensure function invocatoin has started before draining messages
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+
+                // Start draining in-flight messages
+                var drainModeManager = host.Services.GetService<IDrainModeManager>();
+                await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+                // Validate that function execution was allowed to complete
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
+
+                await host.StopAsync();
             }
-            else
-            {
-                await WriteTopicMessage(_primaryConnectionString, TopicName, DrainingTopicMessageBody);
-            }
-
-            // Wait to ensure function invocatoin has started before draining messages
-            Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
-
-            // Start draining in-flight messages
-            var drainModeManager = host.Services.GetService<IDrainModeManager>();
-            await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
-
-            // Validate that function execution was allowed to complete
-            Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
-
-            await host.StopAsync();
-            host.Dispose();
         }
 
         private async Task TestMultiple<T>(bool isXml = false)
         {
-            IHost host = BuildTestHost<T>();
-
-            if (isXml)
+            using (IHost host = BuildTestHost<T>())
             {
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test1", Value = "Value" });
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test2", Value = "Value" });
+                if (isXml)
+                {
+                    await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test1", Value = "Value" });
+                    await WriteQueueMessage(_primaryConnectionString, FirstQueueName, new TestPoco() { Name = "Test2", Value = "Value" });
+                }
+                else
+                {
+                    await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test1', 'Value': 'Value'}");
+                    await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test2', 'Value': 'Value'}");
+                }
+
+                _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
+
+                await host.StartAsync();
+
+                bool result = _topicSubscriptionCalled1.WaitOne(SBTimeout);
+                Assert.True(result);
+
+                // ensure message are completed
+                await Task.Delay(2000);
+
+                // Wait for the host to terminate
+                await host.StopAsync();
             }
-            else
-            {
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test1', 'Value': 'Value'}");
-                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test2', 'Value': 'Value'}");
-            }
-
-            _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
-
-            await host.StartAsync();
-
-            bool result = _topicSubscriptionCalled1.WaitOne(SBTimeout);
-            Assert.True(result);
-
-            // ensure message are completed
-            await Task.Delay(2000);
-
-            // Wait for the host to terminate
-            await host.StopAsync();
-            host.Dispose();
         }
 
         private async Task TestMultipleDrainMode<T>(bool sendToQueue)
         {
-            IHost host = new HostBuilder()
-               .ConfigureDefaultTestHost<T>(b =>
-               {
-                   b.AddServiceBus();
-               }, nameResolver: _nameResolver)
-               .ConfigureServices(s =>
-               {
-                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
-               })
-               .Build();
-
-            await host.StartAsync();
-
-            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
-            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
-
-            if (sendToQueue)
+            using (IHost host = BuildTestHostMessageDraining<T>())
             {
-                await ServiceBusEndToEndTests.WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test1', 'Value': 'Value'}");
-                await ServiceBusEndToEndTests.WriteQueueMessage(_primaryConnectionString, FirstQueueName, "{'Name': 'Test2', 'Value': 'Value'}");
+                await host.StartAsync();
+
+                _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+                _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+                if (sendToQueue)
+                {
+                    await ServiceBusEndToEndTests.WriteQueueMessage(_primaryConnectionString, FirstQueueName, DrainingQueueMessageBody);
+                }
+                else
+                {
+                    await ServiceBusEndToEndTests.WriteTopicMessage(_primaryConnectionString, TopicName, DrainingTopicMessageBody);
+                }
+
+                // Wait to ensure function invocatoin has started before draining messages
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+
+                // Start draining in-flight messages
+                var drainModeManager = host.Services.GetService<IDrainModeManager>();
+                await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+                // Validate that function execution was allowed to complete
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
+
+                // Wait for the host to terminate
+                await host.StopAsync();
             }
-            else
-            {
-                await ServiceBusEndToEndTests.WriteTopicMessage(_primaryConnectionString, TopicName, "{'Name': 'Test1', 'Value': 'Value'}");
-                await ServiceBusEndToEndTests.WriteTopicMessage(_primaryConnectionString, TopicName, "{'Name': 'Test2', 'Value': 'Value'}");
-            }
-
-            // Wait to ensure function invocatoin has started before draining messages
-            Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
-
-            // Start draining in-flight messages
-            var drainModeManager = host.Services.GetService<IDrainModeManager>();
-            await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
-
-            // Validate that function execution was allowed to complete
-            Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
-
-            // Wait for the host to terminate
-            await host.StopAsync();
-            host.Dispose();
         }
 
         private async Task<int> CleanUpEntity(string queueName, string connectionString = null)
@@ -433,7 +432,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         private async Task ServiceBusEndToEndInternal<T>(IHost host = null)
         {
-            if (host == null)
+            bool hostSupplied = (host != null);
+            if (!hostSupplied)
             {
                 host = CreateHost<T>();
             }
@@ -445,132 +445,134 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             _topicSubscriptionCalled1 = new ManualResetEvent(initialState: false);
             _topicSubscriptionCalled2 = new ManualResetEvent(initialState: false);
 
-            using (host)
+            await host.StartAsync();
+
+            _topicSubscriptionCalled1.WaitOne(SBTimeout);
+            _topicSubscriptionCalled2.WaitOne(SBTimeout);
+
+            // ensure all logs have had a chance to flush
+            await Task.Delay(4000);
+
+            // Wait for the host to terminate
+            await host.StopAsync();
+
+            Assert.Equal("E2E-SBQueue2SBQueue-SBQueue2SBTopic-topic-1", _resultMessage1);
+            Assert.Equal("E2E-SBQueue2SBQueue-SBQueue2SBTopic-topic-2", _resultMessage2);
+
+            IEnumerable<LogMessage> logMessages = host.GetTestLoggerProvider()
+                .GetAllLogMessages();
+
+            // filter out anything from the custom processor for easier validation.
+            IEnumerable<LogMessage> consoleOutput = logMessages
+                .Where(m => m.Category != CustomMessagingProvider.CustomMessagingCategory);
+
+            Assert.DoesNotContain(consoleOutput, p => p.Level == LogLevel.Error);
+
+            string[] consoleOutputLines = consoleOutput
+                .Where(p => p.FormattedMessage != null)
+                .SelectMany(p => p.FormattedMessage.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
+                .OrderBy(p => p)
+                .ToArray();
+
+            string[] expectedOutputLines = new string[]
             {
-                await host.StartAsync();
+                "Found the following functions:",
+                $"{jobContainerType.FullName}.SBQueue2SBQueue",
+                $"{jobContainerType.FullName}.MultipleAccounts",
+                $"{jobContainerType.FullName}.SBQueue2SBTopic",
+                $"{jobContainerType.FullName}.SBTopicListener1",
+                $"{jobContainerType.FullName}.SBTopicListener2",
+                $"{jobContainerType.FullName}.ServiceBusBinderTest",
+                "Job host started",
+                $"Executing '{jobContainerType.Name}.SBQueue2SBQueue'",
+                $"Executed '{jobContainerType.Name}.SBQueue2SBQueue' (Succeeded, Id=",
+                $"Trigger Details:",
+                $"Executing '{jobContainerType.Name}.SBQueue2SBTopic'",
+                $"Executed '{jobContainerType.Name}.SBQueue2SBTopic' (Succeeded, Id=",
+                $"Trigger Details:",
+                $"Executing '{jobContainerType.Name}.SBTopicListener1'",
+                $"Executed '{jobContainerType.Name}.SBTopicListener1' (Succeeded, Id=",
+                $"Trigger Details:",
+                $"Executing '{jobContainerType.Name}.SBTopicListener2'",
+                $"Executed '{jobContainerType.Name}.SBTopicListener2' (Succeeded, Id=",
+                $"Trigger Details:",
+                "Job host stopped",
+                "Starting JobHost",
+                "Stopping JobHost",
+                "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
+                "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
+                "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
+                "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
+                "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
+                "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
+                "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
+                "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
+                "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
+                "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
+                "FunctionResultAggregatorOptions",
+                "{",
+                "  \"BatchSize\": 1000",
+                "  \"FlushTimeout\": \"00:00:30\",",
+                "  \"IsEnabled\": true",
+                "}",
+                "LoggerFilterOptions",
+                "{",
+                "  \"MinLevel\": \"Information\"",
+                "  \"Rules\": []",
+                "}",
+                "ServiceBusOptions",
+                "{",
+                "  \"PrefetchCount\": 0,",
+                "  \"MessageHandlerOptions\": {",
+                "      \"AutoComplete\": true,",
+                "      \"MaxAutoRenewDuration\": \"00:05:00\",",
+                $"      \"MaxConcurrentCalls\": {16 * Utility.GetProcessorCount()}",
+                "  }",
+                "  \"SessionHandlerOptions\": {",
+                "      \"MaxAutoRenewDuration\": \"00:05:00\",",
+                "      \"MessageWaitTimeout\": \"00:01:00\",",
+                "      \"MaxConcurrentSessions\": 2000",
+                "      \"AutoComplete\": true",
+                "  }",
+                "}",
+                "  \"BatchOptions\": {",
+                "      \"MaxMessageCount\": 1000,",
+                "      \"OperationTimeout\": \"00:01:00\",",
+                "      \"AutoComplete\": true",
+                "  }",
+                "SingletonOptions",
+                "{",
+                "  \"ListenerLockPeriod\": \"00:01:00\"",
+                "  \"ListenerLockRecoveryPollingInterval\": \"00:01:00\"",
+                "  \"LockAcquisitionPollingInterval\": \"00:00:05\"",
+                "  \"LockAcquisitionTimeout\": \"",
+                "  \"LockPeriod\": \"00:00:15\"",
+                "}",
+            }.OrderBy(p => p).ToArray();
 
-                _topicSubscriptionCalled1.WaitOne(SBTimeout);
-                _topicSubscriptionCalled2.WaitOne(SBTimeout);
+            expectedOutputLines = expectedOutputLines.Select(x => x.Replace(" ", string.Empty)).ToArray();
+            consoleOutputLines = consoleOutputLines.Select(x => x.Replace(" ", string.Empty)).ToArray();
 
-                // ensure all logs have had a chance to flush
-                await Task.Delay(4000);
+            Action<string>[] inspectors = expectedOutputLines.Select<string, Action<string>>(p => (string m) =>
+            {
+                Assert.True(p.StartsWith(m) || m.StartsWith(p));
+            }).ToArray();
+            Assert.Collection(consoleOutputLines, inspectors);
 
-                // Wait for the host to terminate
-                await host.StopAsync();
+            // Verify that trigger details are properly formatted
+            string[] triggerDetailsConsoleOutput = consoleOutputLines
+                .Where(m => m.StartsWith(TriggerDetailsMessageStart)).ToArray();
 
-                Assert.Equal("E2E-SBQueue2SBQueue-SBQueue2SBTopic-topic-1", _resultMessage1);
-                Assert.Equal("E2E-SBQueue2SBQueue-SBQueue2SBTopic-topic-2", _resultMessage2);
+            string expectedPattern = "Trigger Details: MessageId: (.*), DeliveryCount: [0-9]+, EnqueuedTime: (.*), LockedUntil: (.*)";
 
-                IEnumerable<LogMessage> logMessages = host.GetTestLoggerProvider()
-                    .GetAllLogMessages();
+            foreach (string msg in triggerDetailsConsoleOutput)
+            {
+                Assert.True(Regex.IsMatch(msg, expectedPattern), $"Expected trace event {expectedPattern} not found.");
+            }
 
-                // filter out anything from the custom processor for easier validation.
-                IEnumerable<LogMessage> consoleOutput = logMessages
-                    .Where(m => m.Category != CustomMessagingProvider.CustomMessagingCategory);
-
-                Assert.DoesNotContain(consoleOutput, p => p.Level == LogLevel.Error);
-
-                string[] consoleOutputLines = consoleOutput
-                    .Where(p => p.FormattedMessage != null)
-                    .SelectMany(p => p.FormattedMessage.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries))
-                    .OrderBy(p => p)
-                    .ToArray();
-
-                string[] expectedOutputLines = new string[]
-                {
-                   "Found the following functions:",
-                    $"{jobContainerType.FullName}.SBQueue2SBQueue",
-                    $"{jobContainerType.FullName}.MultipleAccounts",
-                    $"{jobContainerType.FullName}.SBQueue2SBTopic",
-                    $"{jobContainerType.FullName}.SBTopicListener1",
-                    $"{jobContainerType.FullName}.SBTopicListener2",
-                    $"{jobContainerType.FullName}.ServiceBusBinderTest",
-                    "Job host started",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBQueue'",
-                    $"Executed '{jobContainerType.Name}.SBQueue2SBQueue' (Succeeded, Id=",
-                    $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBQueue2SBTopic'",
-                    $"Executed '{jobContainerType.Name}.SBQueue2SBTopic' (Succeeded, Id=",
-                    $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener1'",
-                    $"Executed '{jobContainerType.Name}.SBTopicListener1' (Succeeded, Id=",
-                    $"Trigger Details:",
-                    $"Executing '{jobContainerType.Name}.SBTopicListener2'",
-                    $"Executed '{jobContainerType.Name}.SBTopicListener2' (Succeeded, Id=",
-                    $"Trigger Details:",
-                    "Job host stopped",
-                    "Starting JobHost",
-                    "Stopping JobHost",
-                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
-                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'MultipleAccounts'",
-                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
-                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBQueue'",
-                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
-                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBQueue2SBTopic'",
-                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
-                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener1'",
-                    "Stoppingthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
-                    "Stoppedthelistener'Microsoft.Azure.WebJobs.ServiceBus.Listeners.ServiceBusListener'forfunction'SBTopicListener2'",
-                    "FunctionResultAggregatorOptions",
-                    "{",
-                    "  \"BatchSize\": 1000",
-                    "  \"FlushTimeout\": \"00:00:30\",",
-                    "  \"IsEnabled\": true",
-                    "}",
-                    "LoggerFilterOptions",
-                    "{",
-                    "  \"MinLevel\": \"Information\"",
-                    "  \"Rules\": []",
-                    "}",
-                    "ServiceBusOptions",
-                    "{",
-                    "  \"PrefetchCount\": 0,",
-                    "  \"MessageHandlerOptions\": {",
-                    "      \"AutoComplete\": true,",
-                    "      \"MaxAutoRenewDuration\": \"00:05:00\",",
-                    $"      \"MaxConcurrentCalls\": {16 * Utility.GetProcessorCount()}",
-                    "  }",
-                    "  \"SessionHandlerOptions\": {",
-                    "      \"MaxAutoRenewDuration\": \"00:05:00\",",
-                    "      \"MessageWaitTimeout\": \"00:01:00\",",
-                    "      \"MaxConcurrentSessions\": 2000",
-                    "      \"AutoComplete\": true",
-                    "  }",
-                    "}",
-                    "  \"BatchOptions\": {",
-                    "      \"MaxMessageCount\": 1000,",
-                    "      \"OperationTimeout\": \"00:01:00\",",
-                    "      \"AutoComplete\": true",
-                    "  }",
-                    "SingletonOptions",
-                    "{",
-                    "  \"ListenerLockPeriod\": \"00:01:00\"",
-                    "  \"ListenerLockRecoveryPollingInterval\": \"00:01:00\"",
-                    "  \"LockAcquisitionPollingInterval\": \"00:00:05\"",
-                    "  \"LockAcquisitionTimeout\": \"",
-                    "  \"LockPeriod\": \"00:00:15\"",
-                    "}",
-                }.OrderBy(p => p).ToArray();
-
-                expectedOutputLines = expectedOutputLines.Select(x => x.Replace(" ", string.Empty)).ToArray();
-                consoleOutputLines = consoleOutputLines.Select(x => x.Replace(" ", string.Empty)).ToArray();
-
-                Action<string>[] inspectors = expectedOutputLines.Select<string, Action<string>>(p => (string m) =>
-                {
-                    Assert.True(p.StartsWith(m) || m.StartsWith(p));
-                }).ToArray();
-                Assert.Collection(consoleOutputLines, inspectors);
-
-                // Verify that trigger details are properly formatted
-                string[] triggerDetailsConsoleOutput = consoleOutputLines
-                    .Where(m => m.StartsWith(TriggerDetailsMessageStart)).ToArray();
-
-                string expectedPattern = "Trigger Details: MessageId: (.*), DeliveryCount: [0-9]+, EnqueuedTime: (.*), LockedUntil: (.*)";
-
-                foreach (string msg in triggerDetailsConsoleOutput)
-                {
-                    Assert.True(Regex.IsMatch(msg, expectedPattern), $"Expected trace event {expectedPattern} not found.");
-                }
+            if (!hostSupplied)
+            {
+                host.Dispose();
             }
         }
 
@@ -837,29 +839,98 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        public class DrainModeValidationFunctions
+        public class DrainModeTestJobQueue
         {
             public async static void QueueNoSessions(
                 [ServiceBusTrigger(FirstQueueName)] Message msg,
-                string messageId,
+                MessageReceiver messageReceiver,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.QueueNoSessions: message data {msg.Body}");
                 _drainValidationPreDelay.Set();
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
+                await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 _drainValidationPostDelay.Set();
             }
+        }
 
+        public class DrainModeTestJobTopic
+        {
             public async static void TopicNoSessions(
                 [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message msg,
-                string messageId,
+                MessageReceiver messageReceiver,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.NoSessions: message data {msg.Body}");
                 _drainValidationPreDelay.Set();
                 // Simulate a long running function execution to validate that drain invocation allows this to complete
                 await Task.Delay(DrainSleepTime);
+                await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeTestJobQueueBatch
+        {
+            public async static void QueueNoSessionsBatch(
+               [ServiceBusTrigger(FirstQueueName)] Message[] array,
+               MessageReceiver messageReceiver,
+               ILogger logger)
+            {
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeTestJobBatch.QueueNoSessionsBatch: received {array.Length} messages");
+
+                _drainValidationPreDelay.Set();
+
+                // Simulate a long running function execution to validate that drain invocation allows this to complete
+                await Task.Delay(DrainSleepTime);
+
+                foreach (Message msg in array)
+                {
+                    await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
+                }
+
+                string[] messages = array.Select(x =>
+                {
+                    using (Stream stream = new MemoryStream(x.Body))
+                    using (TextReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }).ToArray();
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeTestJobTopicBatch
+        {
+            public async static void TopicNoSessionsBatch(
+               [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message[] array,
+               MessageReceiver messageReceiver,
+               ILogger logger)
+            {
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeTestJobBatch.TopicNoSessionsBatch: received {array.Length} messages");
+
+                _drainValidationPreDelay.Set();
+
+                // Simulate a long running function execution to validate that drain invocation allows this to complete
+                await Task.Delay(DrainSleepTime);
+
+                foreach (Message msg in array)
+                {
+                    await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
+                }
+
+                string[] messages = array.Select(x =>
+                {
+                    using (Stream stream = new MemoryStream(x.Body))
+                    using (TextReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }).ToArray();
                 _drainValidationPostDelay.Set();
             }
         }
@@ -925,6 +996,29 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                .ConfigureDefaultTestHost<TJobClass>(b =>
                {
                    b.AddServiceBus();
+               }, nameResolver: _nameResolver)
+               .ConfigureServices(s =>
+               {
+                   s.Configure<HostOptions>(opts => opts.ShutdownTimeout = HostShutdownTimeout);
+               })
+               .Build();
+
+            return host;
+        }
+
+        private IHost BuildTestHostMessageDraining<TJobClass>()
+        {
+            IHost host = new HostBuilder()
+               .ConfigureDefaultTestHost<TJobClass>(b =>
+               {
+                   b.AddServiceBus(sbOptions =>
+                   {
+                       // We want to ensure messages can be completed in the function code before signaling success to the test
+                       sbOptions.MessageHandlerOptions.AutoComplete = false;
+                       sbOptions.BatchOptions.AutoComplete = false;
+                       sbOptions.MessageHandlerOptions.MaxAutoRenewDuration = MaxAutoRenewDuration;
+                       sbOptions.MessageHandlerOptions.MaxConcurrentCalls = 1;
+                   });
                }, nameResolver: _nameResolver)
                .ConfigureServices(s =>
                {
