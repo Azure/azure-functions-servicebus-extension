@@ -44,7 +44,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const string DrainingTopicMessageBody = "topic-message-draining-no-sessions-1";
 
         private const int SBTimeout = 120 * 1000;
-        private const int DrainSleepTime = 60 * 1000;
+        private const int DrainSleepTime = 20 * 1000;
         private const int MaxAutoRenewDurationMin = 5;
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
         internal static TimeSpan MaxAutoRenewDuration = TimeSpan.FromSeconds(300);
