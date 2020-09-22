@@ -125,7 +125,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 deliveryCounts[i] = messages[i].SystemProperties.DeliveryCount;
                 deadLetterSources[i] = messages[i].SystemProperties.DeadLetterSource;
                 lockTokens[i] = messages[i].SystemProperties.IsLockTokenSet ? messages[i].SystemProperties.LockToken : string.Empty;
-                expiresAtUtcs[i] = messages[i].ExpiresAtUtc;
+                //this is temporary until the Service Bus SDK addresses the missing timezone issue in case DateTime.MaxValue, github.com/Azure/azure-sdk-for-net/issues/15343
+                expiresAtUtcs[i] = messages[i].ExpiresAtUtc.ToUniversalTime();
                 enqueuedTimeUtcs[i] = messages[i].SystemProperties.EnqueuedTimeUtc;
                 messageIds[i] = messages[i].MessageId;
                 contentTypes[i] = messages[i].ContentType;
@@ -143,7 +144,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             SafeAddValue(() => bindingData.Add(nameof(value.SystemProperties.DeliveryCount), value.SystemProperties.DeliveryCount));
             SafeAddValue(() => bindingData.Add(nameof(value.SystemProperties.DeadLetterSource), value.SystemProperties.DeadLetterSource));
             SafeAddValue(() => bindingData.Add(nameof(value.SystemProperties.LockToken), value.SystemProperties.IsLockTokenSet ? value.SystemProperties.LockToken : string.Empty));
-            SafeAddValue(() => bindingData.Add(nameof(value.ExpiresAtUtc), value.ExpiresAtUtc));
+            //this is temporary until the Service Bus SDK addresses the missing timezone issue in case DateTime.MaxValue, github.com/Azure/azure-sdk-for-net/issues/15343
+            SafeAddValue(() => bindingData.Add(nameof(value.ExpiresAtUtc), value.ExpiresAtUtc.ToUniversalTime()));
             SafeAddValue(() => bindingData.Add(nameof(value.SystemProperties.EnqueuedTimeUtc), value.SystemProperties.EnqueuedTimeUtc));
             SafeAddValue(() => bindingData.Add(nameof(value.MessageId), value.MessageId));
             SafeAddValue(() => bindingData.Add(nameof(value.ContentType), value.ContentType));
