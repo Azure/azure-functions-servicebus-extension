@@ -43,11 +43,11 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const string DrainingQueueMessageBody = "queue-message-draining-no-sessions-1";
         private const string DrainingTopicMessageBody = "topic-message-draining-no-sessions-1";
 
-        private const int SBTimeout = 120 * 1000;
-        private const int DrainSleepTime = 60 * 1000;
+        private const int SBTimeoutMills = 120 * 1000;
+        private const int DrainWaitTimeoutMills = 120 * 1000;
+        private const int DrainSleepMills = 5 * 1000;
         private const int MaxAutoRenewDurationMin = 5;
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
-        internal static TimeSpan MaxAutoRenewDuration = TimeSpan.FromSeconds(300);
 
         private static EventWaitHandle _topicSubscriptionCalled1;
         private static EventWaitHandle _topicSubscriptionCalled2;
@@ -174,8 +174,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 await host.StartAsync();
 
-                _topicSubscriptionCalled1.WaitOne(SBTimeout);
-                _topicSubscriptionCalled2.WaitOne(SBTimeout);
+                _topicSubscriptionCalled1.WaitOne(SBTimeoutMills);
+                _topicSubscriptionCalled2.WaitOne(SBTimeoutMills);
 
                 // ensure all logs have had a chance to flush
                 await Task.Delay(3000);
@@ -221,7 +221,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 await host.StartAsync();
 
-                bool result = _eventWait.WaitOne(SBTimeout);
+                bool result = _eventWait.WaitOne(SBTimeoutMills);
                 Assert.True(result);
 
                 var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
@@ -240,7 +240,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 var jobHost = host.GetJobHost();
                 await jobHost.CallAsync(method, new { input = "foobar" });
 
-                bool result = _eventWait.WaitOne(SBTimeout);
+                bool result = _eventWait.WaitOne(SBTimeoutMills);
                 Assert.True(result);
 
                 var logs = host.GetTestLoggerProvider().GetAllLogMessages().Select(p => p.FormattedMessage);
@@ -297,14 +297,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
 
                 // Wait to ensure function invocatoin has started before draining messages
-                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeoutMills));
 
                 // Start draining in-flight messages
                 var drainModeManager = host.Services.GetService<IDrainModeManager>();
                 await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
 
                 // Validate that function execution was allowed to complete
-                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
 
                 await host.StopAsync();
             }
@@ -329,7 +329,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 await host.StartAsync();
 
-                bool result = _topicSubscriptionCalled1.WaitOne(SBTimeout);
+                bool result = _topicSubscriptionCalled1.WaitOne(SBTimeoutMills);
                 Assert.True(result);
 
                 // ensure message are completed
@@ -359,14 +359,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 }
 
                 // Wait to ensure function invocatoin has started before draining messages
-                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeout));
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeoutMills));
 
                 // Start draining in-flight messages
                 var drainModeManager = host.Services.GetService<IDrainModeManager>();
                 await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
 
                 // Validate that function execution was allowed to complete
-                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTime + SBTimeout));
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
 
                 // Wait for the host to terminate
                 await host.StopAsync();
@@ -447,8 +447,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
             await host.StartAsync();
 
-            _topicSubscriptionCalled1.WaitOne(SBTimeout);
-            _topicSubscriptionCalled2.WaitOne(SBTimeout);
+            _topicSubscriptionCalled1.WaitOne(SBTimeoutMills);
+            _topicSubscriptionCalled2.WaitOne(SBTimeoutMills);
 
             // ensure all logs have had a chance to flush
             await Task.Delay(4000);
@@ -841,15 +841,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobQueue
         {
-            public async static void QueueNoSessions(
+            public async static Task QueueNoSessions(
                 [ServiceBusTrigger(FirstQueueName)] Message msg,
                 MessageReceiver messageReceiver,
+                CancellationToken cancellationToken,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.QueueNoSessions: message data {msg.Body}");
                 _drainValidationPreDelay.Set();
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTime);
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 _drainValidationPostDelay.Set();
             }
@@ -857,15 +858,16 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobTopic
         {
-            public async static void TopicNoSessions(
+            public async static Task TopicNoSessions(
                 [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message msg,
                 MessageReceiver messageReceiver,
+                CancellationToken cancellationToken,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.NoSessions: message data {msg.Body}");
                 _drainValidationPreDelay.Set();
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTime);
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 _drainValidationPostDelay.Set();
             }
@@ -873,65 +875,58 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobQueueBatch
         {
-            public async static void QueueNoSessionsBatch(
+            public async static Task QueueNoSessionsBatch(
                [ServiceBusTrigger(FirstQueueName)] Message[] array,
                MessageReceiver messageReceiver,
+               CancellationToken cancellationToken,
                ILogger logger)
             {
                 Assert.True(array.Length > 0);
                 logger.LogInformation($"DrainModeTestJobBatch.QueueNoSessionsBatch: received {array.Length} messages");
-
                 _drainValidationPreDelay.Set();
-
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTime);
-
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 foreach (Message msg in array)
                 {
                     await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 }
-
-                string[] messages = array.Select(x =>
-                {
-                    using (Stream stream = new MemoryStream(x.Body))
-                    using (TextReader reader = new StreamReader(stream))
-                    {
-                        return reader.ReadToEnd();
-                    }
-                }).ToArray();
                 _drainValidationPostDelay.Set();
             }
         }
 
         public class DrainModeTestJobTopicBatch
         {
-            public async static void TopicNoSessionsBatch(
-               [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message[] array,
-               MessageReceiver messageReceiver,
-               ILogger logger)
+            public async static Task TopicNoSessionsBatch(
+                [ServiceBusTrigger(TopicName, TopicSubscriptionName1)] Message[] array,
+                MessageReceiver messageReceiver,
+                CancellationToken cancellationToken,
+                ILogger logger)
             {
                 Assert.True(array.Length > 0);
                 logger.LogInformation($"DrainModeTestJobBatch.TopicNoSessionsBatch: received {array.Length} messages");
-
                 _drainValidationPreDelay.Set();
-
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTime);
-
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 foreach (Message msg in array)
                 {
                     await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 }
-
-                string[] messages = array.Select(x =>
-                {
-                    using (Stream stream = new MemoryStream(x.Body))
-                    using (TextReader reader = new StreamReader(stream))
-                    {
-                        return reader.ReadToEnd();
-                    }
-                }).ToArray();
                 _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeHelper
+        {
+            public async static Task WaitForCancellation(CancellationToken cancellationToken)
+            {
+                // Wait until the drain operation begins, signalled by the cancellation token
+                int elapsedTimeMills = 0;
+                while (elapsedTimeMills < DrainWaitTimeoutMills && !cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(elapsedTimeMills += 500);
+                }
+                // Allow some time for the Service Bus SDK to start draining before returning
+                await Task.Delay(DrainSleepMills);
             }
         }
 
@@ -1016,7 +1011,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                        // We want to ensure messages can be completed in the function code before signaling success to the test
                        sbOptions.MessageHandlerOptions.AutoComplete = false;
                        sbOptions.BatchOptions.AutoComplete = false;
-                       sbOptions.MessageHandlerOptions.MaxAutoRenewDuration = MaxAutoRenewDuration;
+                       sbOptions.MessageHandlerOptions.MaxAutoRenewDuration = TimeSpan.FromMinutes(MaxAutoRenewDurationMin);
                        sbOptions.MessageHandlerOptions.MaxConcurrentCalls = 1;
                    });
                }, nameResolver: _nameResolver)

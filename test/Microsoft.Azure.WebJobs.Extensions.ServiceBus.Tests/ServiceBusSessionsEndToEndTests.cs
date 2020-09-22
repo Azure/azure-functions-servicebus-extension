@@ -39,9 +39,10 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private static EventWaitHandle _drainValidationPostDelay;
         private readonly RandomNameResolver _nameResolver;
         private const int SBTimeoutMills = 120 * 1000;
-        private const int DrainSleepTimeMills = 20 * 1000;
+        private const int DrainWaitTimeoutMills = 120 * 1000;
+        private const int DrainSleepMills = 5 * 1000;
+        public const int MaxAutoRenewDurationMin = 5;
         internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
-        internal static TimeSpan MaxAutoRenewDuration = TimeSpan.FromSeconds(300);
         private readonly string _connectionString;
 
         private readonly ITestOutputHelper outputLogger;
@@ -433,20 +434,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await host.StartAsync();
 
                 // Wait to ensure function invocatoin has started before draining messages
-
                 Assert.True(_drainValidationPreDelay.WaitOne(SBTimeoutMills));
-                // Ensure the message has not been processed already.
-                Assert.False(_drainValidationPostDelay.WaitOne(10));
-                var sw = new Stopwatch();
-                sw.Start();
 
                 // Start draining in-flight messages
                 var drainModeManager = host.Services.GetService<IDrainModeManager>();
                 await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
 
                 // Validate that function execution was allowed to complete
-                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTimeMills + SBTimeoutMills));
-                outputLogger.WriteLine($"TimeElapsedMills: {sw.ElapsedMilliseconds}");
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
 
                 await host.StopAsync();
             }
@@ -508,7 +503,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
 
                 // Validate that function execution was allowed to complete
-                Assert.True(_drainValidationPostDelay.WaitOne(DrainSleepTimeMills + SBTimeoutMills));
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
 
                 // Wait for the host to terminate
                 await host.StopAsync();
@@ -574,16 +569,17 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobQueue
         {
-            public async static void QueueWithSessions(
+            public async static Task QueueWithSessions(
                 [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message msg,
                 IMessageSession messageSession,
+                CancellationToken cancellationToken,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.QueueWithSessions: message data {msg.Body} with session id {msg.SessionId}");
                 Assert.Equal(_drainModeSessionId, msg.SessionId);
                 _drainValidationPreDelay.Set();
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTimeMills);
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
                 _drainValidationPostDelay.Set();
             }
@@ -591,16 +587,17 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobTopic
         {
-            public async static void TopicWithSessions(
+            public async static Task TopicWithSessions(
                 [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message msg,
                 IMessageSession messageSession,
+                CancellationToken cancellationToken,
                 ILogger logger)
             {
                 logger.LogInformation($"DrainModeValidationFunctions.TopicWithSessions: message data {msg.Body} with session id {msg.SessionId}");
-                _drainValidationPreDelay.Set();
                 Assert.Equal(_drainModeSessionId, msg.SessionId);
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTimeMills);
+                _drainValidationPreDelay.Set();
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
                 _drainValidationPostDelay.Set();
             }
@@ -608,67 +605,60 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
         public class DrainModeTestJobQueueBatch
         {
-            public async static void QueueWithSessionsBatch(
-               [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message[] array,
-               IMessageSession messageSession,
-               ILogger logger)
+            public async static Task QueueWithSessionsBatch(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message[] array,
+                IMessageSession messageSession,
+                CancellationToken cancellationToken,
+                ILogger logger)
             {
                 Assert.True(array.Length > 0);
                 logger.LogInformation($"DrainModeTestJobBatch.QueueWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
                 Assert.Equal(_drainModeSessionId, array[0].SessionId);
-
                 _drainValidationPreDelay.Set();
-
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTimeMills);
-
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 foreach (Message msg in array)
                 {
                     await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
                 }
-
-                string[] messages = array.Select(x =>
-                {
-                    using (Stream stream = new MemoryStream(x.Body))
-                    using (TextReader reader = new StreamReader(stream))
-                    {
-                        return reader.ReadToEnd();
-                    }
-                }).ToArray();
                 _drainValidationPostDelay.Set();
             }
         }
 
         public class DrainModeTestJobTopicBatch
         {
-            public async static void TopicWithSessionsBatch(
-               [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message[] array,
-               MessageReceiver messageReceiver,
-               ILogger logger)
+            public async static Task TopicWithSessionsBatch(
+                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message[] array,
+                MessageReceiver messageReceiver,
+                CancellationToken cancellationToken,
+                 ILogger logger)
             {
                 Assert.True(array.Length > 0);
                 logger.LogInformation($"DrainModeTestJobBatch.TopicWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
                 Assert.Equal(_drainModeSessionId, array[0].SessionId);
-                
                 _drainValidationPreDelay.Set();
-                
-                // Simulate a long running function execution to validate that drain invocation allows this to complete
-                await Task.Delay(DrainSleepTimeMills);
-
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
                 foreach (Message msg in array)
                 {
                     await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 }
-
-                string[] messages = array.Select(x =>
-                {
-                    using (Stream stream = new MemoryStream(x.Body))
-                    using (TextReader reader = new StreamReader(stream))
-                    {
-                        return reader.ReadToEnd();
-                    }
-                }).ToArray();
                 _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeHelper
+        {
+            public async static Task WaitForCancellation(CancellationToken cancellationToken)
+            {
+                // Wait until the drain operation begins, signalled by the cancellation token
+                int elapsedTimeMills = 0;
+                while (elapsedTimeMills < DrainWaitTimeoutMills && !cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(elapsedTimeMills += 500);
+                }
+                // Allow some time for the Service Bus SDK to start draining before returning
+                await Task.Delay(DrainSleepMills);
             }
         }
 
@@ -880,7 +870,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                         // Will be disabled for drain mode validation as messages are completed by functoin code to validate draining allows completion 
                         sbOptions.SessionHandlerOptions.AutoComplete = autoComplete;
                         sbOptions.BatchOptions.AutoComplete = autoComplete;
-                        sbOptions.SessionHandlerOptions.MaxAutoRenewDuration = ServiceBusSessionsBusEndToEndTests.MaxAutoRenewDuration;
+                        sbOptions.SessionHandlerOptions.MaxAutoRenewDuration = TimeSpan.FromMinutes(ServiceBusSessionsBusEndToEndTests.MaxAutoRenewDurationMin);
                         sbOptions.SessionHandlerOptions.MaxConcurrentSessions = 1;
                     });
                 })
