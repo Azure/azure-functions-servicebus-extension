@@ -38,6 +38,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private ClientEntity _clientEntity;
         private bool _disposed;
         private bool _started;
+        // Serialize execution of StopAsync to avoid calling Unregister* concurrently
+        private readonly SemaphoreSlim _stopAsyncSemaphore = new SemaphoreSlim(1, 1);
 
         private IMessageSession _messageSession;
         private SessionMessageProcessor _sessionMessageProcessor;
@@ -118,27 +120,53 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         public async Task StopAsync(CancellationToken cancellationToken)
         {
             ThrowIfDisposed();
-
-            if (!_started)
+            await _stopAsyncSemaphore.WaitAsync();
             {
-                throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
-            }
+                try
+                {
+                    if (!_started)
+                    {
+                        throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
+                    }
 
-            // cancel our token source to signal any in progress
-            // ProcessMessageAsync invocations to cancel
-            _cancellationTokenSource.Cancel();
+                    // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
+                    // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
+                    // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
+                    // unregistering the message handler so that functions have as long as the host continues to run time to complete.
+                    if (_singleDispatch)
+                    {
+                        if (_isSessionsEnabled)
+                        {
+                            if (_clientEntity != null)
+                            {
+                                if (_clientEntity is QueueClient queueClient)
+                                {
+                                    await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                }
+                                else
+                                {
+                                    SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
+                                    await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (_receiver != null && _receiver.IsValueCreated)
+                            {
+                                await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
+                            }
+                        }
+                    }
+                    // Batch processing will be stopped via the _started flag on its next iteration
 
-            if (_receiver != null && _receiver.IsValueCreated)
-            {
-                await Receiver.CloseAsync();
-                _receiver = CreateMessageReceiver();
+                    _started = false;
+                }
+                finally
+                {
+                    _stopAsyncSemaphore.Release();
+                }
             }
-            if (_clientEntity != null)
-            {
-                await _clientEntity.CloseAsync();
-                _clientEntity = null;
-            }
-            _started = false;
         }
 
         public void Cancel()
@@ -176,6 +204,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     _clientEntity = null;
                 }
 
+                _stopAsyncSemaphore.Dispose();
+                _cancellationTokenSource.Dispose();
+
                 _disposed = true;
             }
         }
@@ -192,37 +223,39 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
         internal async Task ProcessMessageAsync(Message message, CancellationToken cancellationToken)
         {
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token);
-
-            if (!await _messageProcessor.BeginProcessingMessageAsync(message, linkedCts.Token))
+            using (CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token))
             {
-                return;
+                if (!await _messageProcessor.BeginProcessingMessageAsync(message, linkedCts.Token))
+                {
+                    return;
+                }
+
+                ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
+                input.MessageReceiver = Receiver;
+
+                TriggeredFunctionData data = input.GetTriggerFunctionData();
+                FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
+                await _messageProcessor.CompleteProcessingMessageAsync(message, result, linkedCts.Token);
             }
-
-            ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
-            input.MessageReceiver = Receiver;
-
-            TriggeredFunctionData data = input.GetTriggerFunctionData();
-            FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
-            await _messageProcessor.CompleteProcessingMessageAsync(message, result, linkedCts.Token);
         }
 
         internal async Task ProcessSessionMessageAsync(IMessageSession session, Message message, CancellationToken cancellationToken)
         {
-            CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token);
-
-            _messageSession = session;
-            if (!await _sessionMessageProcessor.BeginProcessingMessageAsync(session, message, linkedCts.Token))
+            using (CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cancellationTokenSource.Token))
             {
-                return;
+                _messageSession = session;
+                if (!await _sessionMessageProcessor.BeginProcessingMessageAsync(session, message, linkedCts.Token))
+                {
+                    return;
+                }
+
+                ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
+                input.MessageReceiver = session;
+
+                TriggeredFunctionData data = input.GetTriggerFunctionData();
+                FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
+                await _sessionMessageProcessor.CompleteProcessingMessageAsync(session, message, result, linkedCts.Token);
             }
-
-            ServiceBusTriggerInput input = ServiceBusTriggerInput.CreateSingle(message);
-            input.MessageReceiver = session;
-
-            TriggeredFunctionData data = input.GetTriggerFunctionData();
-            FunctionResult result = await _triggerExecutor.TryExecuteAsync(data, linkedCts.Token);
-            await _sessionMessageProcessor.CompleteProcessingMessageAsync(session, message, result, linkedCts.Token);
         }
 
         internal void StartMessageBatchReceiver(CancellationToken cancellationToken)
@@ -246,6 +279,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     {
                         if (!_started || cancellationToken.IsCancellationRequested)
                         {
+                            _logger.LogInformation("Message processing has been stopped or cancelled");
                             return;
                         }
 

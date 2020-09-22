@@ -3,6 +3,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -19,6 +20,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 {
@@ -28,19 +30,37 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         private const string _queueName = _prefix + "queue1-sessions";
         private const string _topicName = _prefix + "topic1-sessions";
         private const string _subscriptionName = "sub1-sessions";
+        private const string _drainModeSessionId = "drain-session";
+        private const string DrainingQueueMessageBody = "queue-message-draining-with-sessions-1";
+        private const string DrainingTopicMessageBody = "topic-message-draining-with-sessions-1";
         private static EventWaitHandle _waitHandle1;
         private static EventWaitHandle _waitHandle2;
+        private static EventWaitHandle _drainValidationPreDelay;
+        private static EventWaitHandle _drainValidationPostDelay;
         private readonly RandomNameResolver _nameResolver;
-        private const int SBTimeout = 120 * 1000;
+        private const int SBTimeoutMills = 120 * 1000;
+        private const int DrainWaitTimeoutMills = 120 * 1000;
+        private const int DrainSleepMills = 5 * 1000;
+        public const int MaxAutoRenewDurationMin = 5;
+        internal static TimeSpan HostShutdownTimeout = TimeSpan.FromSeconds(120);
         private readonly string _connectionString;
 
-        public ServiceBusSessionsBusEndToEndTests()
+        private readonly ITestOutputHelper outputLogger;
+
+        public ServiceBusSessionsBusEndToEndTests(ITestOutputHelper output)
         {
+            outputLogger = output;
+
             var config = new ConfigurationBuilder()
                 .AddEnvironmentVariables()
                 .AddTestSettings()
                 .Build();
 
+            // Add all test configuration to the environment as WebJobs requires a few of them to be in the environment
+            foreach (var kv in config.AsEnumerable())
+            {
+                Environment.SetEnvironmentVariable(kv.Key, kv.Value);
+            }
             _connectionString = config.GetConnectionStringOrSetting(ServiceBus.Constants.DefaultConnectionStringName);
 
             _nameResolver = new RandomNameResolver();
@@ -63,7 +83,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message4", "test-session1");
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages = host.GetTestLoggerProvider().GetAllLogMessages();
 
@@ -77,6 +97,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     Assert.True(logMessage.FormattedMessage.StartsWith("message" + i++));
                 }
+
+                await host.StopAsync();
             }
         }
 
@@ -95,7 +117,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message4", "test-session1");
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages = host.GetTestLoggerProvider().GetAllLogMessages();
 
@@ -109,13 +131,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     Assert.True(logMessage.FormattedMessage.StartsWith("message" + i++));
                 }
+
+                await host.StopAsync();
             }
         }
 
         [Fact]
         public async Task ServiceBusSessionQueue_DifferentHosts_DifferentSessions()
         {
-
             using (var host1 = ServiceBusSessionsTestHelper.CreateHost<ServiceBusSessionsTestJobs1>(_nameResolver, true))
             using (var host2 = ServiceBusSessionsTestHelper.CreateHost<ServiceBusSessionsTestJobs2>(_nameResolver, true))
             {
@@ -140,8 +163,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
-                Assert.True(_waitHandle2.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
+                Assert.True(_waitHandle2.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages1 = host1.GetTestLoggerProvider().GetAllLogMessages();
                 List<LogMessage> consoleOutput1 = logMessages1.Where(m => m.Category == "Function.SBQueue1Trigger.User").ToList();
@@ -162,6 +185,13 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     Assert.Equal(sessionId2, m.FormattedMessage[m.FormattedMessage.Length - 1]);
                 }
+
+                List<Task> tasks = new List<Task>
+                {
+                   host1.StopAsync(),
+                   host2.StopAsync()
+                };
+                Task.WaitAll(tasks.ToArray());
             }
         }
 
@@ -192,8 +222,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
-                Assert.True(_waitHandle2.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
+                Assert.True(_waitHandle2.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages1 = host1.GetTestLoggerProvider().GetAllLogMessages();
                 List<LogMessage> consoleOutput1 = logMessages1.Where(m => m.Category == "Function.SBSub1Trigger.User").ToList();
@@ -215,6 +245,13 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 {
                     Assert.Equal(sessionId2, m.FormattedMessage[m.FormattedMessage.Length - 1]);
                 }
+
+                List<Task> tasks = new List<Task>
+                {
+                   host1.StopAsync(),
+                   host2.StopAsync()
+                };
+                Task.WaitAll(tasks.ToArray());
             }
         }
 
@@ -243,8 +280,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session1");
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "message5", "test-session2");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
-                Assert.True(_waitHandle2.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
+                Assert.True(_waitHandle2.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages1 = host.GetTestLoggerProvider().GetAllLogMessages();
 
@@ -266,6 +303,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                             consoleOutput1[5].FormattedMessage[consoleOutput1[0].FormattedMessage.Length - 1]);
                     }
                 }
+
+                await host.StopAsync();
             }
         }
 
@@ -294,8 +333,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session1");
                 await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, "message5", "test-session2");
 
-                Assert.True(_waitHandle1.WaitOne(SBTimeout));
-                Assert.True(_waitHandle2.WaitOne(SBTimeout));
+                Assert.True(_waitHandle1.WaitOne(SBTimeoutMills));
+                Assert.True(_waitHandle2.WaitOne(SBTimeoutMills));
 
                 IEnumerable<LogMessage> logMessages1 = host.GetTestLoggerProvider().GetAllLogMessages();
 
@@ -317,6 +356,8 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                             consoleOutput1[5].FormattedMessage[consoleOutput1[0].FormattedMessage.Length - 1]);
                     }
                 }
+
+                await host.StopAsync();
             }
         }
 
@@ -344,14 +385,71 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await TestMultiple<ServiceBusMultipleMessagesTestJob_BindToPocoArray>(true);
         }
 
+        [Fact]
+        public async Task MessageDraining_QueueWithSessions()
+        {
+            await TestSingleDrainMode<DrainModeTestJobQueue>(true);
+        }
+
+        [Fact]
+        public async Task MessageDraining_TopicWithSessions()
+        {
+            await TestSingleDrainMode<DrainModeTestJobTopic>(false);
+        }
+
+        [Fact]
+        public async Task MessageDraining_QueueWithSessions_Batch()
+        {
+            await TestMultipleDrainMode<DrainModeTestJobQueueBatch>(true);
+        }
+
+        [Fact]
+        public async Task MessageDraining_TopicWithSessions_Batch()
+        {
+            await TestMultipleDrainMode<DrainModeTestJobTopicBatch>(false);
+        }
+
+        /*
+         * Helper functions
+         */
+
+        private async Task TestSingleDrainMode<T>(bool sendToQueue)
+        {
+            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+            if (sendToQueue)
+            {
+                await ServiceBusEndToEndTests.WriteQueueMessage(
+                    _connectionString, _queueName, DrainingQueueMessageBody, _drainModeSessionId);
+            }
+            else
+            {
+                await ServiceBusEndToEndTests.WriteTopicMessage(
+                    _connectionString, _topicName, DrainingTopicMessageBody, _drainModeSessionId);
+            }
+
+            using (IHost host = ServiceBusSessionsTestHelper.CreateHost<T>(_nameResolver, false, false))
+            {
+                await host.StartAsync();
+
+                // Wait to ensure function invocatoin has started before draining messages
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeoutMills));
+
+                // Start draining in-flight messages
+                var drainModeManager = host.Services.GetService<IDrainModeManager>();
+                await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+                // Validate that function execution was allowed to complete
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
+
+                await host.StopAsync();
+            }
+        }
+
         private async Task TestMultiple<T>(bool isXml = false)
         {
-            IHost host = new HostBuilder()
-               .ConfigureDefaultTestHost<T>(b =>
-               {
-                   b.AddServiceBus();
-               }, nameResolver: _nameResolver)
-               .Build();
+            _waitHandle1 = new ManualResetEvent(initialState: false);
 
             if (isXml)
             {
@@ -364,19 +462,52 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, "{'Name': 'Test2', 'Value': 'Value'}", "sessionId");
             }
 
-            _waitHandle1 = new ManualResetEvent(initialState: false);
+            using (IHost host = ServiceBusSessionsTestHelper.CreateHost<T>(_nameResolver))
+            {
+                await host.StartAsync();
 
-            await host.StartAsync();
+                bool result = _waitHandle1.WaitOne(SBTimeoutMills);
+                Assert.True(result);
 
-            bool result = _waitHandle1.WaitOne(SBTimeout);
-            Assert.True(result);
+                // ensure message are completed
+                await Task.Delay(2000);
 
-            // ensure message are completed
-            await Task.Delay(2000);
+                // Wait for the host to terminate
+                await host.StopAsync();
+            }
+        }
 
-            // Wait for the host to terminate
-            await host.StopAsync();
-            host.Dispose();
+        private async Task TestMultipleDrainMode<T>(bool sendToQueue)
+        {
+            _drainValidationPreDelay = new ManualResetEvent(initialState: false);
+            _drainValidationPostDelay = new ManualResetEvent(initialState: false);
+
+            if (sendToQueue)
+            {
+                await ServiceBusEndToEndTests.WriteQueueMessage(_connectionString, _queueName, DrainingQueueMessageBody, _drainModeSessionId);
+            }
+            else
+            {
+                await ServiceBusEndToEndTests.WriteTopicMessage(_connectionString, _topicName, DrainingTopicMessageBody, _drainModeSessionId);
+            }
+
+            using (IHost host = ServiceBusSessionsTestHelper.CreateHost<T>(_nameResolver, false, false))
+            {
+                await host.StartAsync();
+
+                // Wait to ensure function invocatoin has started before draining messages
+                Assert.True(_drainValidationPreDelay.WaitOne(SBTimeoutMills));
+
+                // Start draining in-flight messages
+                var drainModeManager = host.Services.GetService<IDrainModeManager>();
+                await drainModeManager.EnableDrainModeAsync(CancellationToken.None);
+
+                // Validate that function execution was allowed to complete
+                Assert.True(_drainValidationPostDelay.WaitOne(DrainWaitTimeoutMills + SBTimeoutMills));
+
+                // Wait for the host to terminate
+                await host.StopAsync();
+            }
         }
 
         private async Task Cleanup()
@@ -436,12 +567,107 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
+        public class DrainModeTestJobQueue
+        {
+            public async static Task QueueWithSessions(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message msg,
+                IMessageSession messageSession,
+                CancellationToken cancellationToken,
+                ILogger logger)
+            {
+                logger.LogInformation($"DrainModeValidationFunctions.QueueWithSessions: message data {msg.Body} with session id {msg.SessionId}");
+                Assert.Equal(_drainModeSessionId, msg.SessionId);
+                _drainValidationPreDelay.Set();
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
+                await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeTestJobTopic
+        {
+            public async static Task TopicWithSessions(
+                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message msg,
+                IMessageSession messageSession,
+                CancellationToken cancellationToken,
+                ILogger logger)
+            {
+                logger.LogInformation($"DrainModeValidationFunctions.TopicWithSessions: message data {msg.Body} with session id {msg.SessionId}");
+                Assert.Equal(_drainModeSessionId, msg.SessionId);
+                _drainValidationPreDelay.Set();
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
+                await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeTestJobQueueBatch
+        {
+            public async static Task QueueWithSessionsBatch(
+                [ServiceBusTrigger(_queueName, IsSessionsEnabled = true)] Message[] array,
+                IMessageSession messageSession,
+                CancellationToken cancellationToken,
+                ILogger logger)
+            {
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeTestJobBatch.QueueWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
+                Assert.Equal(_drainModeSessionId, array[0].SessionId);
+                _drainValidationPreDelay.Set();
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
+                foreach (Message msg in array)
+                {
+                    await messageSession.CompleteAsync(msg.SystemProperties.LockToken);
+                }
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeTestJobTopicBatch
+        {
+            public async static Task TopicWithSessionsBatch(
+                [ServiceBusTrigger(_topicName, _subscriptionName, IsSessionsEnabled = true)] Message[] array,
+                MessageReceiver messageReceiver,
+                CancellationToken cancellationToken,
+                 ILogger logger)
+            {
+                Assert.True(array.Length > 0);
+                logger.LogInformation($"DrainModeTestJobBatch.TopicWithSessionsBatch: received {array.Length} messages with session id {array[0].SessionId}");
+                Assert.Equal(_drainModeSessionId, array[0].SessionId);
+                _drainValidationPreDelay.Set();
+                await DrainModeHelper.WaitForCancellation(cancellationToken);
+                Assert.True(cancellationToken.IsCancellationRequested);
+                foreach (Message msg in array)
+                {
+                    await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
+                }
+                _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class DrainModeHelper
+        {
+            public async static Task WaitForCancellation(CancellationToken cancellationToken)
+            {
+                // Wait until the drain operation begins, signalled by the cancellation token
+                int elapsedTimeMills = 0;
+                while (elapsedTimeMills < DrainWaitTimeoutMills && !cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(elapsedTimeMills += 500);
+                }
+                // Allow some time for the Service Bus SDK to start draining before returning
+                await Task.Delay(DrainSleepMills);
+            }
+        }
+
         public class ServiceBusMultipleTestJobsBase
         {
             protected static bool firstReceived = false;
             protected static bool secondReceived = false;
 
-            public static void ProcessMessages(string[] messages)
+            public static void ProcessMessages(string[] messages, EventWaitHandle waitHandle = null)
             {
                 if (messages.Contains("{'Name': 'Test1', 'Value': 'Value'}"))
                 {
@@ -454,7 +680,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
 
                 if (firstReceived && secondReceived)
                 {
-                    _waitHandle1.Set();
+                    bool b = (waitHandle !=null) ? waitHandle.Set() : _waitHandle1.Set();
                 }
             }
         }
@@ -577,6 +803,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             {
                 _waitHandle2.Dispose();
             }
+            Cleanup().GetAwaiter().GetResult();
         }
     }
 
@@ -633,20 +860,31 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             }
         }
 
-        public static IHost CreateHost<T>(INameResolver reolver, bool addCustomProvider = false)
+        public static IHost CreateHost<T>(INameResolver nameResolver, bool addCustomProvider = false, bool autoComplete = true)
         {
             return new HostBuilder()
                 .ConfigureDefaultTestHost<T>(b =>
                 {
-                    b.AddServiceBus();
+                    b.AddServiceBus(sbOptions =>
+                    {
+                        // Will be disabled for drain mode validation as messages are completed by functoin code to validate draining allows completion 
+                        sbOptions.SessionHandlerOptions.AutoComplete = autoComplete;
+                        sbOptions.BatchOptions.AutoComplete = autoComplete;
+                        sbOptions.SessionHandlerOptions.MaxAutoRenewDuration = TimeSpan.FromMinutes(ServiceBusSessionsBusEndToEndTests.MaxAutoRenewDurationMin);
+                        sbOptions.SessionHandlerOptions.MaxConcurrentSessions = 1;
+                    });
                 })
                 .ConfigureServices(services =>
                 {
-                    services.AddSingleton(reolver);
+                    services.AddSingleton(nameResolver);
                     if (addCustomProvider)
                     {
                         services.AddSingleton<MessagingProvider, ServiceBusSessionsBusEndToEndTests.CustomMessagingProvider>();
                     }
+                })
+                .ConfigureServices(s =>
+                {
+                    s.Configure<HostOptions>(opts => opts.ShutdownTimeout = ServiceBusSessionsBusEndToEndTests.HostShutdownTimeout);
                 })
                 .Build();
         }
