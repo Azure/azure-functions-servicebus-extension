@@ -66,7 +66,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             try
             {
                 // Peek the first message in the queue without removing it from the queue
-                message = await _receiver.Value.PeekAsync();
+                // PeekAsync remembers the sequence number of the last message, so the second call returns the second message instead of the first one
+                // Use PeekBySequenceNumberAsync with fromSequenceNumber = 0 to always get the first available message
+                message = await _receiver.Value.PeekBySequenceNumberAsync(0);
 
                 if (_entityType == EntityType.Queue)
                 {
