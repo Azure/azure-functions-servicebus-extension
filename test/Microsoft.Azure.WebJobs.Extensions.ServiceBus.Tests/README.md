@@ -1,13 +1,13 @@
 ﻿# Service Bus Extension for Azure Functions guide to running integration tests locally
 Integration tests are implemented in the `EndToEndTests` and `SessionsEndToEndTests` classes and require special configuration to execute locally in Visual Studio or via dotnet test.  
 
-All configuration is done via a json file called `appsettings.tests` which on windows should be located in the `%USERPROFILE%\.azurefunctions` folder (e.g. `C:\Users\user123\.azurefunctions`)
+All configuration is done via a json file called `appsettings.tests.json` which on windows should be located in the `%USERPROFILE%\.azurefunctions` folder (e.g. `C:\Users\user123\.azurefunctions`)
 
 **Note:** *The specifics of the configuration will change when the validation code is modified so check the code for the latest configuration if the tests do not pass as this readme file may not have been updated with each code change.*
 
-Create the appropriate Azure resources if needed as explained below and create or update the `appsettings.tests` file in the location specified above by copying the configuration below and replacing all the `PLACEHOLDER` values
+Create the appropriate Azure resources if needed as explained below and create or update the `appsettings.tests.json` file in the location specified above by copying the configuration below and replacing all the `PLACEHOLDER` values
 
-appsettings.tests contents
+appsettings.tests.json contents
 ```
 {
     "ConnectionStrings": {
