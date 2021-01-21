@@ -3,7 +3,7 @@ Integration tests are implemented in the `EndToEndTests` and `SessionsEndToEndTe
 
 All configuration is done via a json file called `appsettings.tests.json` which on windows should be located in the `%USERPROFILE%\.azurefunctions` folder (e.g. `C:\Users\user123\.azurefunctions`)
 
-**Note:** *The specifics of the configuration will change when the validation code is modified so check the code for the latest configuration if the tests do not pass as this readme file may not have been updated with each code change.*
+**Note:** *The specifics of the configuration may change when validation code is modified so check the code for the latest configuration settings if tests do not pass in case this readme file was not updated.*
 
 Create the appropriate Azure resources if needed as explained below and create or update the `appsettings.tests.json` file in the location specified above by copying the configuration below and replacing all the `PLACEHOLDER` values
 
@@ -28,7 +28,7 @@ Create two service bus namespaces and configure their connection strings in `Con
 2. In the namespace configured into `ConnectionStrings:ServiceBus`, create topics and subscriptions with the following names:
     1. `core-test-topic1` with two subscriptions: `sub1` and `sub2`
     2. `core-test-topic1-sessions` with one subscription: `sub1-sessions` (enable sessions in the subscription when creating)
-2. In the namespace configured into `ConnectionStrings:ServiceBusSecondary`, create queues with the following names:
+3. In the namespace configured into `ConnectionStrings:ServiceBusSecondary`, create a queue with the following name:
     1. `core-test-queue1`
 
-  Change the message lock duration setting on all queues and subscriptions to 5 minutes to all for delays associated with stepping through code in debug mode.
+Change the message lock duration setting on all queues and topic subscriptions to 5 minutes to allow for delays associated with stepping through code in debug mode.
