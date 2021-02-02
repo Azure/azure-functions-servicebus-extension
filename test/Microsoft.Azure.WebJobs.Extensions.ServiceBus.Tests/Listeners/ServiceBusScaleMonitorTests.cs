@@ -234,6 +234,95 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
         }
 
         [Fact]
+        public void GetScaleStatus_OldestMessagesQueueTimeThresholdExceeded_ReturnsVote_ScaleOut()
+        {
+            var context = new ScaleStatusContext<ServiceBusTriggerMetrics>
+            {
+                WorkerCount = 1
+            };
+            var timestamp = DateTime.UtcNow;
+            var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
+            {
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 1},
+            };
+            context.Metrics = serviceBusTriggerMetrics;
+
+            var status = _scaleMonitor.GetScaleStatus(context);
+            Assert.Equal(ScaleVote.ScaleOut, status.Vote);
+
+            var logs = _loggerProvider.GetAllLogMessages().ToArray();
+            var log = logs[0];
+            Assert.Equal(LogLevel.Information, log.Level);
+            Assert.Equal($"Oldest message in Service Bus time (00:00:10) > 1.5s", log.FormattedMessage);
+            log = logs[1];
+            Assert.Equal(LogLevel.Information, log.Level);
+            Assert.Equal($"Oldest message for Service Bus Entity ({_entityPath}, 00:00:10) " +
+                                   $"has waited for too long.", log.FormattedMessage);
+            // verify again with a non generic context instance
+            var context2 = new ScaleStatusContext
+            {
+                WorkerCount = 1,
+                Metrics = serviceBusTriggerMetrics
+            };
+            status = ((IScaleMonitor)_scaleMonitor).GetScaleStatus(context2);
+            Assert.Equal(ScaleVote.ScaleOut, status.Vote);
+        }
+
+        [Fact]
+        public void GetScaleStatus_OldestMessagesQueueTimeThresholdExceeded_WorkerCountExceeds_ReturnsVote_None()
+        {
+            var context = new ScaleStatusContext<ServiceBusTriggerMetrics>
+            {
+                WorkerCount = 11
+            };
+            var timestamp = DateTime.UtcNow;
+            var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
+            {
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 1},
+            };
+            context.Metrics = serviceBusTriggerMetrics;
+
+            var status = _scaleMonitor.GetScaleStatus(context);
+            Assert.Equal(ScaleVote.None, status.Vote);
+
+            // verify again with a non generic context instance
+            var context2 = new ScaleStatusContext
+            {
+                WorkerCount = 11,
+                Metrics = serviceBusTriggerMetrics
+            };
+            status = ((IScaleMonitor)_scaleMonitor).GetScaleStatus(context2);
+            Assert.Equal(ScaleVote.None, status.Vote);
+        }
+
+        [Fact]
+        public void GetScaleStatus_OldestMessagesQueueTimeThresholdExceeded_Retried_ReturnsVote_None()
+        {
+            var context = new ScaleStatusContext<ServiceBusTriggerMetrics>
+            {
+                WorkerCount = 1
+            };
+            var timestamp = DateTime.UtcNow;
+            var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
+            {
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 2},
+            };
+            context.Metrics = serviceBusTriggerMetrics;
+
+            var status = _scaleMonitor.GetScaleStatus(context);
+            Assert.Equal(ScaleVote.None, status.Vote);
+
+            // verify again with a non generic context instance
+            var context2 = new ScaleStatusContext
+            {
+                WorkerCount = 11,
+                Metrics = serviceBusTriggerMetrics
+            };
+            status = ((IScaleMonitor)_scaleMonitor).GetScaleStatus(context2);
+            Assert.Equal(ScaleVote.None, status.Vote);
+        }
+
+        [Fact]
         public void GetScaleStatus_MessagesPerWorkerThresholdExceeded_ReturnsVote_ScaleOut()
         {
             var context = new ScaleStatusContext<ServiceBusTriggerMetrics>

@@ -3,8 +3,6 @@
 
 using Microsoft.Azure.WebJobs.Host.Scale;
 using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 {
@@ -25,5 +23,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         /// sitting there.
         /// </summary>
         public TimeSpan QueueTime { get; set; }
+
+        /// <summary>
+        /// The delivery count of the next message
+        /// </summary>
+        public int DeliveryCount { get; set; } = -1;
     }
 }

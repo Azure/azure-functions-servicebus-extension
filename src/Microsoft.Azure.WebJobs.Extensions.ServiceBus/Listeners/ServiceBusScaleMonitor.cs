@@ -3,9 +3,7 @@
 
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.ServiceBus.Core;
@@ -18,6 +16,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
     internal class ServiceBusScaleMonitor : IScaleMonitor<ServiceBusTriggerMetrics>
     {
         private const string DeadLetterQueuePath = @"/$DeadLetterQueue";
+        private static readonly TimeSpan OldestMessageInQueueThreshold = TimeSpan.FromSeconds(1.5);
 
         private readonly string _functionId;
         private readonly EntityType _entityType;
@@ -137,7 +136,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             // See more information here: https://docs.microsoft.com/en-us/azure/service-bus-messaging/service-bus-partitioning#standard
             topicDescription = await _managementClient.Value.GetTopicAsync(topicPath);
             partitionCount = topicDescription.EnablePartitioning ? 16 : 0;
-
             return CreateTriggerMetrics(message, activeMessageCount, deadLetterCount, partitionCount, _isListeningOnDeadLetterQueue);
         }
 
@@ -145,11 +143,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         {
             long totalNewMessageCount = 0;
             TimeSpan queueTime = TimeSpan.Zero;
+            int deliveryCount = -1;
 
             if (message != null)
             {
                 queueTime = DateTime.UtcNow.Subtract(message.SystemProperties.EnqueuedTimeUtc);
                 totalNewMessageCount = 1; // There's at least one if message != null. Default for connection string with no manage claim
+                deliveryCount = message.SystemProperties.DeliveryCount;
             }
 
             if ((!isListeningOnDeadLetterQueue && activeMessageCount > 0) || (isListeningOnDeadLetterQueue && deadLetterCount > 0))
@@ -161,7 +161,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             {
                 MessageCount = totalNewMessageCount,
                 PartitionCount = partitionCount,
-                QueueTime = queueTime
+                QueueTime = queueTime,
+                DeliveryCount = deliveryCount
             };
         }
 
@@ -200,6 +201,22 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 _logger.LogInformation($"Number of instances ({workerCount}) is too high relative to number " +
                                        $"of partitions for Service Bus entity ({_entityPath}, {partitionCount}).");
                 return status;
+            }
+
+            if (metrics.Length > 0)
+            {
+                ServiceBusTriggerMetrics latestMetrics = metrics.Last();
+                TimeSpan latestQueueTime = latestMetrics.QueueTime;
+                if (workerCount <= 10 // avoids overscaling
+                    && latestMetrics.DeliveryCount == 1 // only consider new message
+                    && latestQueueTime > OldestMessageInQueueThreshold)
+                {
+                    status.Vote = ScaleVote.ScaleOut;
+                    _logger.LogInformation($"Oldest message in Service Bus time ({latestQueueTime}) > {OldestMessageInQueueThreshold.TotalSeconds}s");
+                    _logger.LogInformation($"Oldest message for Service Bus Entity ({_entityPath}, {latestQueueTime}) " +
+                                           $"has waited for too long.");
+                    return status;
+                }
             }
 
             // At least 5 samples are required to make a scale decision for the rest of the checks.
