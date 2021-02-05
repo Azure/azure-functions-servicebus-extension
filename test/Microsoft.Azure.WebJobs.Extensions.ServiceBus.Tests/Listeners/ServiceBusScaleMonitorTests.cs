@@ -243,7 +243,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             var timestamp = DateTime.UtcNow;
             var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
             {
-                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 1},
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 0},
             };
             context.Metrics = serviceBusTriggerMetrics;
 
@@ -278,7 +278,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             var timestamp = DateTime.UtcNow;
             var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
             {
-                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 1},
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 0},
             };
             context.Metrics = serviceBusTriggerMetrics;
 
@@ -305,7 +305,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             var timestamp = DateTime.UtcNow;
             var serviceBusTriggerMetrics = new List<ServiceBusTriggerMetrics>
             {
-                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 2},
+                new ServiceBusTriggerMetrics { MessageCount = 2900, PartitionCount = 0, QueueTime = TimeSpan.FromSeconds(10), Timestamp = timestamp.AddSeconds(15), DeliveryCount = 1},
             };
             context.Metrics = serviceBusTriggerMetrics;
 

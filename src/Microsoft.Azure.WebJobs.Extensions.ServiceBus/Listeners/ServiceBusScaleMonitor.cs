@@ -16,8 +16,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
     internal class ServiceBusScaleMonitor : IScaleMonitor<ServiceBusTriggerMetrics>
     {
         private const string DeadLetterQueuePath = @"/$DeadLetterQueue";
-        private static readonly TimeSpan OldestMessageInQueueThreshold = TimeSpan.FromSeconds(1.5);
-
+        // for runtime driven scale, the worker already has one worker assigned, make it less aggressive to prevent overscaling
+        private static readonly TimeSpan OldestMessageInQueueThreshold = TimeSpan.FromSeconds(5); 
         private readonly string _functionId;
         private readonly EntityType _entityType;
         private readonly string _entityPath;
@@ -208,7 +208,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 ServiceBusTriggerMetrics latestMetrics = metrics.Last();
                 TimeSpan latestQueueTime = latestMetrics.QueueTime;
                 if (workerCount <= 10 // avoids overscaling
-                    && latestMetrics.DeliveryCount == 1 // only consider new message
+                    && latestMetrics.DeliveryCount == 0 // only consider new message, Microsoft.Azure.ServiceBus SDK return delivery count = 1 when peek a new messgae
                     && latestQueueTime > OldestMessageInQueueThreshold)
                 {
                     status.Vote = ScaleVote.ScaleOut;
