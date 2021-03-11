@@ -46,8 +46,14 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
         private Lazy<ServiceBusScaleMonitor> _scaleMonitor;
 
+        private readonly object messageReceivePumpSyncLock;
+        private DynamicMessageReceivePump receivePump;
+        CancellationTokenSource receivePumpCancellationTokenSource;
+
+        private ConcurrencyManager _concurrencyManager;
+
         public ServiceBusListener(string functionId, EntityType entityType, string entityPath, bool isSessionsEnabled, ITriggeredFunctionExecutor triggerExecutor,
-            ServiceBusOptions config, ServiceBusAccount serviceBusAccount, MessagingProvider messagingProvider, ILoggerFactory loggerFactory, bool singleDispatch)
+            ServiceBusOptions config, ServiceBusAccount serviceBusAccount, MessagingProvider messagingProvider, ILoggerFactory loggerFactory, bool singleDispatch, ConcurrencyManager concurrencyManager)
         {
             _functionId = functionId;
             _entityType = entityType;
@@ -73,6 +79,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 _messageProcessor = _messagingProvider.CreateMessageProcessor(entityPath, _serviceBusAccount.ConnectionString);
             }
             _serviceBusOptions = config;
+
+            messageReceivePumpSyncLock = new object();
+            _concurrencyManager = concurrencyManager;
         }
 
         internal MessageReceiver Receiver => _receiver.Value;
@@ -105,7 +114,14 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 }
                 else
                 {
-                    Receiver.RegisterMessageHandler(ProcessMessageAsync, _serviceBusOptions.MessageHandlerOptions);
+                    if (_concurrencyManager.Enabled)
+                    {
+                        StartDynamicConcurrencyMessagePump(Receiver, ProcessMessageAsync, _serviceBusOptions.MessageHandlerOptions);
+                    }
+                    else
+                    {
+                        Receiver.RegisterMessageHandler(ProcessMessageAsync, _serviceBusOptions.MessageHandlerOptions);
+                    }
                 }
             }
             else
@@ -115,6 +131,46 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             _started = true;
 
             return Task.CompletedTask;
+        }
+
+        public void StartDynamicConcurrencyMessagePump(MessageReceiver receiver, Func<Message, CancellationToken, Task> handler, MessageHandlerOptions messageHandlerOptions)
+        {
+            //MessagingEventSource.Log.RegisterOnMessageHandlerStart(this.ClientId, registerHandlerOptions);
+
+            lock (this.messageReceivePumpSyncLock)
+            {
+                if (this.receivePump != null)
+                {
+                    //throw new InvalidOperationException(Resources.MessageHandlerAlreadyRegistered);
+                }
+
+                this.receivePumpCancellationTokenSource = new CancellationTokenSource();
+                this.receivePump = new DynamicMessageReceivePump(receiver, messageHandlerOptions, handler, receiver.ServiceBusConnection.Endpoint, _logger, _concurrencyManager, _functionId, this.receivePumpCancellationTokenSource.Token);
+            }
+
+            try
+            {
+                this.receivePump.StartPump();
+            }
+            catch (Exception exception)
+            {
+                //MessagingEventSource.Log.RegisterOnMessageHandlerException(this.ClientId, exception);
+                _logger.LogError(exception, $"{receiver.ClientId}: Failed to start message pump.");
+
+                lock (this.messageReceivePumpSyncLock)
+                {
+                    if (this.receivePump != null)
+                    {
+                        this.receivePumpCancellationTokenSource.Cancel();
+                        this.receivePumpCancellationTokenSource.Dispose();
+                        this.receivePump = null;
+                    }
+                }
+
+                throw;
+            }
+
+            //MessagingEventSource.Log.RegisterOnMessageHandlerStop(this.ClientId);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
@@ -154,7 +210,23 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                         {
                             if (_receiver != null && _receiver.IsValueCreated)
                             {
-                                await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
+                                if (_concurrencyManager.Enabled)
+                                {
+                                    lock (this.messageReceivePumpSyncLock)
+                                    {
+                                        if (this.receivePump != null)
+                                        {
+                                            // TODO: need to drain as unregister does?
+                                            this.receivePumpCancellationTokenSource.Cancel();
+                                            this.receivePumpCancellationTokenSource.Dispose();
+                                            this.receivePump = null;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
+                                }
                             }
                         }
                     }

@@ -60,8 +60,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             _loggerProvider = new TestLoggerProvider();
             _loggerFactory.AddProvider(_loggerProvider);
 
+            Mock<ConcurrencyManager> concurrencyManagerMock = new Mock<ConcurrencyManager>(MockBehavior.Strict);
+
             _listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, _mockExecutor.Object, config, mockServiceBusAccount.Object,
-                                _mockMessagingProvider.Object, _loggerFactory, false);
+                                _mockMessagingProvider.Object, _loggerFactory, false, concurrencyManagerMock.Object);
         }
 
         [Fact]

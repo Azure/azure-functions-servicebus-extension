@@ -1,6 +1,7 @@
 ﻿// Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
+using System;
 using Newtonsoft.Json;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus
@@ -28,5 +29,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         public const string DefaultConnectionSettingStringName = "AzureWebJobsServiceBus";
         public const string DynamicSku = "Dynamic";
         public const string AzureWebsiteSku = "WEBSITE_SKU";
+
+        public static readonly TimeSpan DefaultOperationTimeout = TimeSpan.FromMinutes(1);
+        public static readonly TimeSpan MaximumRenewBufferDuration = TimeSpan.FromSeconds(10);
     }
 }

@@ -15,6 +15,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
 using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Azure.WebJobs.Host.Scale;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
 {
@@ -27,9 +28,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IConverterManager _converterManager;
+        private readonly ConcurrencyManager _concurrencyManager;
 
         public ServiceBusTriggerAttributeBindingProvider(INameResolver nameResolver, ServiceBusOptions options, MessagingProvider messagingProvider, IConfiguration configuration,
-            ILoggerFactory loggerFactory, IConverterManager converterManager)
+            ILoggerFactory loggerFactory, IConverterManager converterManager, ConcurrencyManager concurrencyManager)
         {
             _nameResolver = nameResolver ?? throw new ArgumentNullException(nameof(nameResolver));
             _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -37,6 +39,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             _configuration = configuration;
             _loggerFactory = loggerFactory;
             _converterManager = converterManager;
+            _concurrencyManager = concurrencyManager;
         }
 
         public Task<ITriggerBinding> TryCreateAsync(TriggerBindingProviderContext context)
@@ -80,7 +83,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             Func<ListenerFactoryContext, bool, Task<IListener>> createListener =
             (factoryContext, singleDispatch) =>
             {
-                IListener listener = new ServiceBusListener(factoryContext.Descriptor.Id, entityType, entityPath, attribute.IsSessionsEnabled, factoryContext.Executor, _options, account, _messagingProvider, _loggerFactory, singleDispatch);
+                IListener listener = new ServiceBusListener(factoryContext.Descriptor.Id, entityType, entityPath, attribute.IsSessionsEnabled, factoryContext.Executor, _options, account, _messagingProvider, _loggerFactory, singleDispatch, _concurrencyManager);
                 return Task.FromResult(listener);
             };
 

@@ -526,7 +526,7 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                 "  \"MessageHandlerOptions\": {",
                 "      \"AutoComplete\": true,",
                 "      \"MaxAutoRenewDuration\": \"00:05:00\",",
-                $"      \"MaxConcurrentCalls\": {16 * Utility.GetProcessorCount()}",
+                $"      \"MaxConcurrentCalls\": {16 * Utility.GetEffectiveCoresCount()}",
                 "  }",
                 "  \"SessionHandlerOptions\": {",
                 "      \"MaxAutoRenewDuration\": \"00:05:00\",",

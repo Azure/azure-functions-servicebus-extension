@@ -12,6 +12,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Xunit;
+using Microsoft.Azure.WebJobs.Host.Scale;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Bindings
 {
@@ -32,8 +33,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Bindings
             _mockMessagingProvider = new Mock<MessagingProvider>(MockBehavior.Strict, new OptionsWrapper<ServiceBusOptions>(config));
 
             Mock<IConverterManager> convertManager = new Mock<IConverterManager>(MockBehavior.Default);
+            Mock<ConcurrencyManager> concurrencyManagerMock = new Mock<ConcurrencyManager>(MockBehavior.Strict);
 
-            _provider = new ServiceBusTriggerAttributeBindingProvider(mockResolver.Object, config, _mockMessagingProvider.Object, _configuration, NullLoggerFactory.Instance, convertManager.Object);
+            _provider = new ServiceBusTriggerAttributeBindingProvider(mockResolver.Object, config, _mockMessagingProvider.Object, _configuration, NullLoggerFactory.Instance, convertManager.Object, concurrencyManagerMock.Object);
         }
 
         [Fact]

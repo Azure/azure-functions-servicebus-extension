@@ -64,8 +64,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             _loggerProvider = new TestLoggerProvider();
             _loggerFactory.AddProvider(_loggerProvider);
 
+            Mock<ConcurrencyManager> concurrencyManagerMock = new Mock<ConcurrencyManager>(MockBehavior.Strict);
+
             _listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, _mockExecutor.Object, _serviceBusOptions, _mockServiceBusAccount.Object,
-                                _mockMessagingProvider.Object, _loggerFactory, false);
+                                _mockMessagingProvider.Object, _loggerFactory, false, concurrencyManagerMock.Object);
             _scaleMonitor = (ServiceBusScaleMonitor)_listener.GetMonitor();
         }
 
@@ -121,12 +123,14 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
         [Fact]
         public async Task GetMetrics_HandlesExceptions()
         {
+            Mock<ConcurrencyManager> concurrencyManagerMock = new Mock<ConcurrencyManager>(MockBehavior.Strict);
+
             // MessagingEntityNotFoundException
             _mockMessagingProvider
                 .Setup(p => p.CreateMessageReceiver(_entityPath, _testConnection))
                 .Throws(new MessagingEntityNotFoundException(""));
             ServiceBusListener listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, _mockExecutor.Object, _serviceBusOptions,
-                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false);
+                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false, concurrencyManagerMock.Object);
 
             var metrics = await ((ServiceBusScaleMonitor)listener.GetMonitor()).GetMetricsAsync();
 
@@ -144,7 +148,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
                 .Setup(p => p.CreateMessageReceiver(_entityPath, _testConnection))
                 .Throws(new UnauthorizedException(""));
             listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, _mockExecutor.Object, _serviceBusOptions,
-                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false);
+                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false, concurrencyManagerMock.Object);
 
             metrics = await ((ServiceBusScaleMonitor)listener.GetMonitor()).GetMetricsAsync();
 
@@ -164,7 +168,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
                 .Setup(p => p.CreateMessageReceiver(_entityPath, _testConnection))
                 .Throws(new Exception("Uh oh"));
             listener = new ServiceBusListener(_functionId, EntityType.Queue, _entityPath, false, _mockExecutor.Object, _serviceBusOptions,
-                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false);
+                                                _mockServiceBusAccount.Object, _mockMessagingProvider.Object, _loggerFactory, false, concurrencyManagerMock.Object);
 
             metrics = await ((ServiceBusScaleMonitor)listener.GetMonitor()).GetMetricsAsync();
 

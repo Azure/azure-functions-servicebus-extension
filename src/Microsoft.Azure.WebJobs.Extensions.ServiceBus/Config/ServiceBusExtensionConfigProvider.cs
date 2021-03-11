@@ -6,6 +6,7 @@ using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.WebJobs.Description;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Azure.WebJobs.Host.Scale;
 using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Bindings;
 using Microsoft.Azure.WebJobs.ServiceBus.Triggers;
@@ -29,6 +30,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
         private readonly IConverterManager _converterManager;
+        private readonly ConcurrencyManager _concurrencyManager;
 
         /// <summary>
         /// Creates a new <see cref="ServiceBusExtensionConfigProvider"/> instance.
@@ -39,7 +41,8 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
             INameResolver nameResolver,
             IConfiguration configuration,
             ILoggerFactory loggerFactory,
-            IConverterManager converterManager)
+            IConverterManager converterManager,
+            ConcurrencyManager concurrencyManager)
         {
             _options = options.Value;
             _messagingProvider = messagingProvider;
@@ -47,6 +50,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
             _configuration = configuration;
             _loggerFactory = loggerFactory ?? NullLoggerFactory.Instance;
             _converterManager = converterManager;
+            _concurrencyManager = concurrencyManager;
         }
 
         /// <summary>
@@ -81,7 +85,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
                 .AddOpenConverter<Message, OpenType.Poco>(typeof(MessageToPocoConverter<>));
 
             // register our trigger binding provider
-            ServiceBusTriggerAttributeBindingProvider triggerBindingProvider = new ServiceBusTriggerAttributeBindingProvider(_nameResolver, _options, _messagingProvider, _configuration, _loggerFactory, _converterManager);
+            ServiceBusTriggerAttributeBindingProvider triggerBindingProvider = new ServiceBusTriggerAttributeBindingProvider(_nameResolver, _options, _messagingProvider, _configuration, _loggerFactory, _converterManager, _concurrencyManager);
             context.AddBindingRule<ServiceBusTriggerAttribute>()
                 .BindToTrigger(triggerBindingProvider);
 
