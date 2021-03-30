@@ -124,41 +124,39 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             {
                 try
                 {
-                    if (!_started)
+                    if (_started)
                     {
-                        throw new InvalidOperationException("The listener has not yet been started or has already been stopped.");
-                    }
-
-                    // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
-                    // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
-                    // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
-                    // unregistering the message handler so that functions have as long as the host continues to run time to complete.
-                    if (_singleDispatch)
-                    {
-                        if (_isSessionsEnabled)
+                        // Unregister* methods stop new messages from being processed while allowing in-flight messages to complete.
+                        // As the amount of time functions are allowed to complete processing varies by SKU, we specify max timespan
+                        // as the amount of time Service Bus SDK should wait for in-flight messages to complete procesing after 
+                        // unregistering the message handler so that functions have as long as the host continues to run time to complete.
+                        if (_singleDispatch)
                         {
-                            if (_clientEntity != null)
+                            if (_isSessionsEnabled)
                             {
-                                if (_clientEntity is QueueClient queueClient)
+                                if (_clientEntity != null)
                                 {
-                                    await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                    if (_clientEntity is QueueClient queueClient)
+                                    {
+                                        await queueClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                    }
+                                    else
+                                    {
+                                        SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
+                                        await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                    }
                                 }
-                                else
+                            }
+                            else
+                            {
+                                if (_receiver != null && _receiver.IsValueCreated)
                                 {
-                                    SubscriptionClient subscriptionClient = _clientEntity as SubscriptionClient;
-                                    await subscriptionClient.UnregisterSessionHandlerAsync(TimeSpan.MaxValue);
+                                    await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
                                 }
                             }
                         }
-                        else
-                        {
-                            if (_receiver != null && _receiver.IsValueCreated)
-                            {
-                                await Receiver.UnregisterMessageHandlerAsync(TimeSpan.MaxValue);
-                            }
-                        }
+                        // Batch processing will be stopped via the _started flag on its next iteration
                     }
-                    // Batch processing will be stopped via the _started flag on its next iteration
 
                     _started = false;
                 }
@@ -172,7 +170,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         public void Cancel()
         {
             ThrowIfDisposed();
-            _cancellationTokenSource.Cancel();
+            StopAsync(CancellationToken.None).Wait();
         }
 
         [SuppressMessage("Microsoft.Usage", "CA2213:DisposableFieldsShouldBeDisposed", MessageId = "_cancellationTokenSource")]
