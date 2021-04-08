@@ -170,7 +170,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         public void Cancel()
         {
             ThrowIfDisposed();
-            StopAsync(CancellationToken.None).Wait();
         }
 
         [SuppressMessage("Microsoft.Usage", "CA2213:DisposableFieldsShouldBeDisposed", MessageId = "_cancellationTokenSource")]
