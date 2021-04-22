@@ -213,6 +213,12 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
         }
 
         [Fact]
+        public async Task TestBatch_AutoCompleteDisabledOnTrigger()
+        {
+            await TestMultiple<ServiceBusMultipleMessagesTestJob_AutoCompleteDisabledOnTrigger>();
+        }
+
+        [Fact]
         public async Task BindToPoco()
         {
             using (IHost host = BuildTestHost<ServiceBusArgumentBindingJob>())
@@ -811,6 +817,32 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             {
                 Assert.Equal(FirstQueueName, messageReceiver.Path);
                 string[] messages = array.Select(x => "{'Name': '" + x.Name + "', 'Value': 'Value'}").ToArray();
+                ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
+            }
+        }
+
+        public class ServiceBusMultipleMessagesTestJob_AutoCompleteDisabledOnTrigger
+        {
+            public static async void SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName, AutoComplete = false)] Message[] array,
+                MessageReceiver messageReceiver)
+            {
+                Assert.Equal(FirstQueueName, messageReceiver.Path);
+                string[] messages = array.Select(x =>
+                {
+                    using (Stream stream = new MemoryStream(x.Body))
+                    using (TextReader reader = new StreamReader(stream))
+                    {
+                        return reader.ReadToEnd();
+                    }
+                }).ToArray();
+
+                foreach (Message msg in array)
+                {
+                    // Complete succeeds here, as auto complete is disabled on the function.
+                    await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
+                }
+
                 ServiceBusMultipleTestJobsBase.ProcessMessages(messages);
             }
         }

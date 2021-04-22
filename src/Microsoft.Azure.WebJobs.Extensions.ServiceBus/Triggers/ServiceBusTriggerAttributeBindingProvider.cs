@@ -27,6 +27,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         private readonly IConfiguration _configuration;
         private readonly ILoggerFactory _loggerFactory;
         private readonly IConverterManager _converterManager;
+        private readonly ILogger<ServiceBusTriggerAttributeBindingProvider> _logger;
 
         public ServiceBusTriggerAttributeBindingProvider(INameResolver nameResolver, ServiceBusOptions options, MessagingProvider messagingProvider, IConfiguration configuration,
             ILoggerFactory loggerFactory, IConverterManager converterManager)
@@ -37,6 +38,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             _configuration = configuration;
             _loggerFactory = loggerFactory;
             _converterManager = converterManager;
+            _logger = _loggerFactory.CreateLogger<ServiceBusTriggerAttributeBindingProvider>();
         }
 
         public Task<ITriggerBinding> TryCreateAsync(TriggerBindingProviderContext context)
@@ -80,7 +82,9 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             Func<ListenerFactoryContext, bool, Task<IListener>> createListener =
             (factoryContext, singleDispatch) =>
             {
-                IListener listener = new ServiceBusListener(factoryContext.Descriptor.Id, entityType, entityPath, attribute.IsSessionsEnabled, factoryContext.Executor, _options, account, _messagingProvider, _loggerFactory, singleDispatch);
+                var options = GetServiceBusOptions(attribute, factoryContext.Descriptor.ShortName);
+
+                IListener listener = new ServiceBusListener(factoryContext.Descriptor.Id, entityType, entityPath, attribute.IsSessionsEnabled, factoryContext.Executor, options, account, _messagingProvider, _loggerFactory, singleDispatch);
                 return Task.FromResult(listener);
             };
 
@@ -97,6 +101,27 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
             }
 
             return _nameResolver.ResolveWholeString(queueName);
+        }
+
+        /// <summary>
+        /// Gets service bus options after applying function level options if needed.
+        /// </summary>
+        /// <param name="attribute">The trigger attribute.</param>
+        /// <param name="functionName">The function name.</param>
+        private ServiceBusOptions GetServiceBusOptions(ServiceBusTriggerAttribute attribute, string functionName)
+        {
+            if (attribute.IsAutoCompleteOptionSet)
+            {
+                var options = ServiceBusOptions.DeepClone(_options);
+
+                _logger.LogInformation($"The 'AutoComplete' option has been overrriden to '{attribute.AutoComplete}' value for '{functionName}' function.");
+
+                options.BatchOptions.AutoComplete = options.MessageHandlerOptions.AutoComplete = options.SessionHandlerOptions.AutoComplete = attribute.AutoComplete;
+
+                return options;
+            }
+
+            return _options;
         }
     }
 }
