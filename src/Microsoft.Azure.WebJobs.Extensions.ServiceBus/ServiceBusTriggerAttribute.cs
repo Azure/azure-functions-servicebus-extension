@@ -30,6 +30,7 @@ namespace Microsoft.Azure.WebJobs
         private readonly string _queueName;
         private readonly string _topicName;
         private readonly string _subscriptionName;
+        private bool? _autoComplete = null;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="ServiceBusTriggerAttribute"/> class.
@@ -87,6 +88,26 @@ namespace Microsoft.Azure.WebJobs
         /// Gets or sets a value indicating whether the sessions are enabled.
         /// </summary>
         public bool IsSessionsEnabled { get; set; }
+
+        /// <summary>
+        /// Gets or sets the flag whether trigger should automatically call complete after processing, or if the function code will manually call complete.
+        /// </summary>
+        public bool AutoComplete
+        {
+            get
+            {
+                return _autoComplete.HasValue ? _autoComplete.Value : true;
+            }
+            set
+            {
+                _autoComplete = value;
+            }
+        }
+
+        /// <summary>
+        /// Gets a boolean to check if auto complete option was set on the trigger.
+        /// </summary>
+        internal bool IsAutoCompleteOptionSet { get { return _autoComplete.HasValue; } }
 
         private string DebuggerDisplay
         {
