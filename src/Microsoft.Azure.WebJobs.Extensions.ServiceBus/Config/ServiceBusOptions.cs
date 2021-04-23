@@ -118,6 +118,39 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             return options.ToString(Formatting.Indented);
         }
 
+        /// <summary>
+        /// Deep clones service bus options.
+        /// </summary>
+        /// <param name="source">The soure service bus options.</param>
+        internal static ServiceBusOptions DeepClone(ServiceBusOptions source)
+        {
+            if (source == null)
+            {
+                return null;
+            }
+
+            var options = new ServiceBusOptions()
+            {
+                ConnectionString = source.ConnectionString,
+                PrefetchCount = source.PrefetchCount,
+            };
+
+            options.MessageHandlerOptions.AutoComplete = source.MessageHandlerOptions.AutoComplete;
+            options.MessageHandlerOptions.MaxAutoRenewDuration = new TimeSpan(source.MessageHandlerOptions.MaxAutoRenewDuration.Ticks);
+            options.MessageHandlerOptions.MaxConcurrentCalls = source.MessageHandlerOptions.MaxConcurrentCalls;
+
+            options.SessionHandlerOptions.AutoComplete = source.SessionHandlerOptions.AutoComplete;
+            options.SessionHandlerOptions.MaxConcurrentSessions = source.SessionHandlerOptions.MaxConcurrentSessions;
+            options.SessionHandlerOptions.MaxAutoRenewDuration = new TimeSpan(source.SessionHandlerOptions.MaxAutoRenewDuration.Ticks);
+            options.SessionHandlerOptions.MessageWaitTimeout = new TimeSpan(source.SessionHandlerOptions.MessageWaitTimeout.Ticks);
+
+            options.BatchOptions.AutoComplete = source.BatchOptions.AutoComplete;
+            options.BatchOptions.MaxMessageCount = source.BatchOptions.MaxMessageCount;
+            options.BatchOptions.OperationTimeout = new TimeSpan(source.BatchOptions.OperationTimeout.Ticks);
+
+            return options;
+        }
+
         private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs args)
         {
             ExceptionHandler?.Invoke(args);

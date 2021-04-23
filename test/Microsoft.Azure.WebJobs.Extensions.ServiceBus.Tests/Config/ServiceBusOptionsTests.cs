@@ -5,7 +5,6 @@ using System;
 using System.Linq;
 using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.WebJobs.Host.TestCommon;
-using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Config;
 using Microsoft.Extensions.Logging;
 using Xunit;
@@ -83,6 +82,35 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
             Assert.Equal(LogLevel.Error, logMessage.Level);
             Assert.Same(ex, logMessage.Exception);
             Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+        }
+
+        [Fact]
+        public void DeepClone()
+        {
+            var options = new ServiceBusOptions();
+            var clonedOptions = ServiceBusOptions.DeepClone(options);
+            Assert.NotEqual(options, clonedOptions);
+            Assert.Equal(options.PrefetchCount, clonedOptions.PrefetchCount);
+            Assert.Equal(options.ExceptionHandler, clonedOptions.ExceptionHandler);
+            Assert.Equal(options.MessageHandlerOptions.AutoComplete, clonedOptions.MessageHandlerOptions.AutoComplete);
+            Assert.Equal(options.MessageHandlerOptions.MaxAutoRenewDuration.Ticks, clonedOptions.MessageHandlerOptions.MaxAutoRenewDuration.Ticks);
+            Assert.Equal(options.MessageHandlerOptions.MaxConcurrentCalls, clonedOptions.MessageHandlerOptions.MaxConcurrentCalls);
+            Assert.Equal(options.BatchOptions.AutoComplete, clonedOptions.BatchOptions.AutoComplete);
+            Assert.Equal(options.BatchOptions.MaxMessageCount, clonedOptions.BatchOptions.MaxMessageCount);
+            Assert.Equal(options.BatchOptions.OperationTimeout.Ticks, clonedOptions.BatchOptions.OperationTimeout.Ticks);
+            Assert.Equal(options.SessionHandlerOptions.AutoComplete, clonedOptions.SessionHandlerOptions.AutoComplete);
+            Assert.Equal(options.SessionHandlerOptions.MaxAutoRenewDuration.Ticks, clonedOptions.SessionHandlerOptions.MaxAutoRenewDuration.Ticks);
+            Assert.Equal(options.SessionHandlerOptions.MaxConcurrentSessions, clonedOptions.SessionHandlerOptions.MaxConcurrentSessions);
+            Assert.Equal(options.SessionHandlerOptions.MessageWaitTimeout.Ticks, clonedOptions.SessionHandlerOptions.MessageWaitTimeout.Ticks);
+
+            // Perform updates on cloned options. They should not copied over to the source
+            clonedOptions.MessageHandlerOptions.AutoComplete = options.BatchOptions.AutoComplete = options.SessionHandlerOptions.AutoComplete = false;
+            Assert.NotEqual(options.MessageHandlerOptions.AutoComplete, clonedOptions.MessageHandlerOptions.AutoComplete);
+            Assert.NotEqual(options.BatchOptions.AutoComplete, clonedOptions.BatchOptions.AutoComplete);
+            Assert.NotEqual(options.SessionHandlerOptions.AutoComplete, clonedOptions.SessionHandlerOptions.AutoComplete);
+
+            clonedOptions.MessageHandlerOptions.MaxAutoRenewDuration = new TimeSpan(0, 10, 0);
+            Assert.NotEqual(options.MessageHandlerOptions.MaxAutoRenewDuration.Ticks, clonedOptions.MessageHandlerOptions.MaxAutoRenewDuration.Ticks);
         }
     }
 }
