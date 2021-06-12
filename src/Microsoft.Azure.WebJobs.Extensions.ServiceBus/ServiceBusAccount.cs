@@ -33,7 +33,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                 if (string.IsNullOrEmpty(_connectionString))
                 {
                     _connectionString = _options.ConnectionString;
-                    if (_connectionProvider != null && !string.IsNullOrEmpty(_connectionProvider.Connection))
+                    if (_connectionProvider != null && !string.IsNullOrEmpty(_connectionProvider.Connection) && string.IsNullOrEmpty(_connectionString))
                     {
                         _connectionString = _configuration.GetWebJobsConnectionString(_connectionProvider.Connection);
                     }
