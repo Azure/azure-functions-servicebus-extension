@@ -34,7 +34,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             // https://github.com/Azure/azure-sdk-for-net/blob/master/sdk/servicebus/Microsoft.Azure.ServiceBus/src/Constants.cs#L30
             BatchOptions = new BatchOptions()
             {
-                MaxMessageCount = 1000,
+                MaxMessageCount = 100,
                 OperationTimeout = TimeSpan.FromMinutes(1),
                 AutoComplete = true
             };
