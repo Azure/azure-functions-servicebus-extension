@@ -28,6 +28,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
         private readonly ServiceBusOptions _options;
         private readonly MessagingProvider _messagingProvider;
         private readonly IConverterManager _converterManager;
+        private EventSourceCreatedListener _eventSourceCreatedListener;
 
         /// <summary>
         /// Creates a new <see cref="ServiceBusExtensionConfigProvider"/> instance.
@@ -67,7 +68,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
                 throw new ArgumentNullException("context");
             }
 
-
+            if (bool.TryParse(Environment.GetEnvironmentVariable(Constants.ServiceBusLogsEnabled), out bool serviceBusLogsEnabled))
+            {
+                if (serviceBusLogsEnabled)
+                {
+                    _eventSourceCreatedListener = new EventSourceCreatedListener(_loggerFactory);
+                }
+            }
 
             context
                 .AddConverter<Message, string>(new MessageToStringConverter())

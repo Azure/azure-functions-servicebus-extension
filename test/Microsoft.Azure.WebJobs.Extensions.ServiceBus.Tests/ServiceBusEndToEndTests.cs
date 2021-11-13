@@ -280,6 +280,69 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await TestMultipleDrainMode<DrainModeTestJobTopicBatch>(false);
         }
 
+        [Fact]
+        public async Task ServiceBusLogging_Enabled()
+        {
+            try
+            {
+                Environment.SetEnvironmentVariable(Constants.ServiceBusLogsEnabled, "true");
+                LoggerFactory loggerFactory = new LoggerFactory();
+                TestLoggerProvider loggerProvider = new TestLoggerProvider();
+                loggerFactory.AddProvider(loggerProvider);
+
+                using (IHost host = new HostBuilder()
+                .ConfigureDefaultTestHost<ServiceBusLoggingTestJobs>(b =>
+                {
+                    b.AddServiceBus();
+                })
+                .ConfigureServices(services =>
+                {
+                    services.AddSingleton<ILoggerFactory>(loggerFactory);
+                })
+                .Build())
+                {
+                    await host.StartAsync();
+
+                    await TestHelpers.Await(() =>
+                    {
+                        IEnumerable<LogMessage> logMessages = loggerProvider.GetAllLogMessages();
+                        return logMessages.Where(x => x.Category.Contains(nameof(EventSourceCreatedListener))).Any();
+                    });                    
+                }
+            } 
+            finally
+            {
+                Environment.SetEnvironmentVariable(Constants.ServiceBusLogsEnabled, null);
+            }
+        }
+
+        [Fact]
+        public async Task ServiceBusLogging_Disabled()
+        {
+            LoggerFactory loggerFactory = new LoggerFactory();
+            TestLoggerProvider loggerProvider = new TestLoggerProvider();
+            loggerFactory.AddProvider(loggerProvider);
+
+            using (IHost host = new HostBuilder()
+            .ConfigureDefaultTestHost<ServiceBusLoggingTestJobs>(b =>
+            {
+                b.AddServiceBus();
+            })
+            .ConfigureServices(services =>
+            {
+                services.AddSingleton<ILoggerFactory>(loggerFactory);
+            })
+            .Build())
+            {
+                await host.StartAsync();
+                // ensure all logs have had a chance to flush
+                await Task.Delay(5000);
+
+                IEnumerable<LogMessage> logMessages = loggerProvider.GetAllLogMessages();
+                Assert.False(logMessages.Where(x => x.Category.Contains("EventSourceCreatedListener")).Any());
+            }
+        }
+
         /*
          * Helper functions
          */
@@ -1014,6 +1077,14 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             private Task ExceptionReceivedHandler(ExceptionReceivedEventArgs eventArgs)
             {
                 return Task.CompletedTask;
+            }
+        }
+
+        public class ServiceBusLoggingTestJobs : ServiceBusTestJobsBase
+        {
+               public static void SBQueue2SBQueue(
+                [ServiceBusTrigger(FirstQueueName)] string message)
+            {
             }
         }
 
