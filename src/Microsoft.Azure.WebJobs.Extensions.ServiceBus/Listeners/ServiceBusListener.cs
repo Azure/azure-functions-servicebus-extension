@@ -155,10 +155,10 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                                 }
                             }
                         }
+                        // Batch processing will be stopped via the _cancellationTokenSource on its next iteration
+                        _cancellationTokenSource.Cancel();
                     }
 
-                    // Batch processing will be stopped via the _cancellationTokenSource on its next iteration
-                    _cancellationTokenSource.Cancel();
                     _started = false;
                 }
                 finally
