@@ -45,6 +45,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
         private SessionMessageProcessor _sessionMessageProcessor;
 
         private Lazy<ServiceBusScaleMonitor> _scaleMonitor;
+        private Lazy<string> _details;
 
         public ServiceBusListener(string functionId, EntityType entityType, string entityPath, bool isSessionsEnabled, ITriggeredFunctionExecutor triggerExecutor,
             ServiceBusOptions config, ServiceBusAccount serviceBusAccount, MessagingProvider messagingProvider, ILoggerFactory loggerFactory, bool singleDispatch)
@@ -73,6 +74,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 _messageProcessor = _messagingProvider.CreateMessageProcessor(entityPath, _serviceBusAccount.ConnectionString);
             }
             _serviceBusOptions = config;
+
+            _details = new Lazy<string>(() =>
+            {
+                string endpoint = _isSessionsEnabled ? _clientEntity.ServiceBusConnection.Endpoint.ToString() : _receiver.Value?.ServiceBusConnection.Endpoint.ToString();
+                return $"namespace='{endpoint}', enityPath='{_entityPath}', singleDispatch='{_singleDispatch}', " +
+                            $"isSessionsEnabled='{_isSessionsEnabled}', functionId='{_functionId}'";
+            });
         }
 
         internal MessageReceiver Receiver => _receiver.Value;
@@ -118,6 +126,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 StartMessageBatchReceiver(_cancellationTokenSource.Token);
             }
 
+            _logger.LogDebug($"ServiceBus listener started ({_details.Value})");
             return Task.CompletedTask;
         }
 
@@ -164,9 +173,15 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
                     _started = false;
                 }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"ServiceBus listener exception during stopping ({_details.Value})");
+                    throw;
+                }
                 finally
                 {
                     _stopAsyncSemaphore.Release();
+                    _logger.LogDebug($"ServiceBus listener stopped ({_details.Value})");
                 }
             }
         }
@@ -280,7 +295,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     {
                         if (!_started || cancellationToken.IsCancellationRequested)
                         {
-                            _logger.LogInformation("Message processing has been stopped or cancelled");
+                            _logger.LogInformation($"Message processing has been stopped or cancelled ({_details.Value})");
                             return;
                         }
 
@@ -343,11 +358,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     catch (ObjectDisposedException)
                     {
                         // Ignore as we are stopping the host
+                        _logger.LogInformation($"Message processing has been stopped or cancelled ({_details.Value})");
                     }
                     catch (Exception ex)
                     {
                         // Log another exception
-                        _logger.LogError(ex, $"An unhandled exception occurred in the message batch receive loop");
+                        _logger.LogError(ex, $"An unhandled exception occurred in the message batch receive loop ({_details.Value})");
 
                         if (_isSessionsEnabled && receiver != null)
                         {
