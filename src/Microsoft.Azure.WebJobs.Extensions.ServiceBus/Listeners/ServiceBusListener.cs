@@ -88,6 +88,11 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                 throw new InvalidOperationException("The listener has already been started.");
             }
 
+            // The _started flag is set here and not after StartMessageBatchReceiver is called
+            // to avoid a race condition in which the batch receive loop could start before the _started
+            // flag is set to true, leading to the listener never receiving any messages 
+            _started = true;
+
             if (_singleDispatch)
             {
                 if (_isSessionsEnabled)
@@ -112,7 +117,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
             {
                 StartMessageBatchReceiver(_cancellationTokenSource.Token);
             }
-            _started = true;
 
             return Task.CompletedTask;
         }
