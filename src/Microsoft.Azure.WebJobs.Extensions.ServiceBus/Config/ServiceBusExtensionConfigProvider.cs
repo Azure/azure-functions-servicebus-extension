@@ -6,6 +6,7 @@ using Microsoft.Azure.ServiceBus;
 using Microsoft.Azure.WebJobs.Description;
 using Microsoft.Azure.WebJobs.Host.Bindings;
 using Microsoft.Azure.WebJobs.Host.Config;
+using Microsoft.Azure.WebJobs.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Bindings;
 using Microsoft.Azure.WebJobs.ServiceBus.Triggers;
 using Microsoft.Extensions.Configuration;
@@ -67,7 +68,12 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
                 throw new ArgumentNullException("context");
             }
 
-
+            // Set the default exception handler for background exceptions
+            // coming from MessageReceivers.
+            Options.ExceptionHandler = (e) =>
+            {
+                LogExceptionReceivedEvent(e, _loggerFactory);
+            };
 
             context
                 .AddConverter<Message, string>(new MessageToStringConverter())
@@ -82,6 +88,40 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Config
             // register our binding provider
             ServiceBusAttributeBindingProvider bindingProvider = new ServiceBusAttributeBindingProvider(_nameResolver, _options, _configuration, _messagingProvider);
             context.AddBindingRule<ServiceBusAttribute>().Bind(bindingProvider);
-        } 
+        }
+
+        internal static void LogExceptionReceivedEvent(ExceptionReceivedEventArgs e, ILoggerFactory loggerFactory)
+        {
+            try
+            {
+                var ctxt = e.ExceptionReceivedContext;
+                var logger = loggerFactory?.CreateLogger(LogCategories.Executor);
+                string message = $"Message processing error (Action={ctxt.Action}, ClientId={ctxt.ClientId}, EntityPath={ctxt.EntityPath}, Endpoint={ctxt.Endpoint})";
+
+                var logLevel = GetLogLevel(e.Exception);
+                logger?.Log(logLevel, 0, message, e.Exception, (s, ex) => message);
+            }
+            catch
+            {
+                // best effort logging
+            }
+        }
+
+        private static LogLevel GetLogLevel(Exception ex)
+        {
+            var sbex = ex as ServiceBusException;
+            if (!(ex is OperationCanceledException) && (sbex == null || !sbex.IsTransient))
+            {
+                // any non-transient exceptions or unknown exception types
+                // we want to log as errors
+                return LogLevel.Error;
+            }
+            else
+            {
+                // transient messaging errors we log as info so we have a record
+                // of them, but we don't treat them as actual errors
+                return LogLevel.Information;
+            }
+        }        
     }
 }

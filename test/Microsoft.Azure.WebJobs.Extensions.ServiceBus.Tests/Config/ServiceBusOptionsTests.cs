@@ -41,6 +41,50 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Config
         }
 
         [Fact]
+        public void LogExceptionReceivedEvent_NonTransientEvent_LoggedAsError()
+        {
+            var ex = new ServiceBusException(false);
+            Assert.False(ex.IsTransient);
+            ExceptionReceivedEventArgs e = new ExceptionReceivedEventArgs(ex, "TestAction", "TestEndpoint", "TestEntity", "TestClient");
+            ServiceBusExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
+
+            var expectedMessage = $"Message processing error (Action=TestAction, ClientId=TestClient, EntityPath=TestEntity, Endpoint=TestEndpoint)";
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal(LogLevel.Error, logMessage.Level);
+            Assert.Same(ex, logMessage.Exception);
+            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+        }
+
+        [Fact]
+        public void LogExceptionReceivedEvent_TransientEvent_LoggedAsInformation()
+        {
+            var ex = new ServiceBusException(true);
+            Assert.True(ex.IsTransient);
+            ExceptionReceivedEventArgs e = new ExceptionReceivedEventArgs(ex, "TestAction", "TestEndpoint", "TestEntity", "TestClient");
+            ServiceBusExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
+
+            var expectedMessage = $"Message processing error (Action=TestAction, ClientId=TestClient, EntityPath=TestEntity, Endpoint=TestEndpoint)";
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal(LogLevel.Information, logMessage.Level);
+            Assert.Same(ex, logMessage.Exception);
+            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+        }
+
+        [Fact]
+        public void LogExceptionReceivedEvent_NonMessagingException_LoggedAsError()
+        {
+            var ex = new MissingMethodException("What method??");
+            ExceptionReceivedEventArgs e = new ExceptionReceivedEventArgs(ex, "TestAction", "TestEndpoint", "TestEntity", "TestClient");
+            ServiceBusExtensionConfigProvider.LogExceptionReceivedEvent(e, _loggerFactory);
+
+            var expectedMessage = $"Message processing error (Action=TestAction, ClientId=TestClient, EntityPath=TestEntity, Endpoint=TestEndpoint)";
+            var logMessage = _loggerProvider.GetAllLogMessages().Single();
+            Assert.Equal(LogLevel.Error, logMessage.Level);
+            Assert.Same(ex, logMessage.Exception);
+            Assert.Equal(expectedMessage, logMessage.FormattedMessage);
+        }
+
+        [Fact]
         public void DeepClone()
         {
             var options = new ServiceBusOptions();

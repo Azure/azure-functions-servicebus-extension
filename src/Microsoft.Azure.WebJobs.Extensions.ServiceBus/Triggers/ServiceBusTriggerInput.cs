@@ -66,7 +66,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                         TriggerValue = this,
                         TriggerDetails = new Dictionary<string, string>()
                         {
-                            { "Count", "1"},
                             { "MessageId", message.MessageId },
                             { "SequenceNumber",  message.SystemProperties.SequenceNumber.ToString() },
                             { "DeliveryCount", message.SystemProperties.DeliveryCount.ToString() },
@@ -103,7 +102,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
                         TriggerValue = this,
                         TriggerDetails = new Dictionary<string, string>()
                         {
-                            { "Count", Messages.Length.ToString()},
                             { "MessageIdArray", string.Join(",", messageIds)},
                             { "SequenceNumberArray", string.Join(",", sequenceNumbers)},
                             { "DeliveryCountArray", string.Join(",", deliveryCounts) },

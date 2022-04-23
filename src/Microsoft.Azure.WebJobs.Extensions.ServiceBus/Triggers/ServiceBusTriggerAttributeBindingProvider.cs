@@ -15,7 +15,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Azure.WebJobs.ServiceBus.Listeners;
 using Microsoft.Azure.WebJobs.Host.Config;
-using Microsoft.Azure.WebJobs.Logging;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
 {
@@ -111,53 +110,18 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Triggers
         /// <param name="functionName">The function name.</param>
         private ServiceBusOptions GetServiceBusOptions(ServiceBusTriggerAttribute attribute, string functionName)
         {
-            var options = ServiceBusOptions.DeepClone(_options);
-            options.ExceptionHandler += (e) =>
-            {
-                LogExceptionReceivedEvent(e, functionName, _loggerFactory);
-            };
-
             if (attribute.IsAutoCompleteOptionSet)
             {
+                var options = ServiceBusOptions.DeepClone(_options);
+
                 _logger.LogInformation($"The 'AutoComplete' option has been overrriden to '{attribute.AutoComplete}' value for '{functionName}' function.");
+
                 options.BatchOptions.AutoComplete = options.MessageHandlerOptions.AutoComplete = options.SessionHandlerOptions.AutoComplete = attribute.AutoComplete;
-            }
-            return options;
-        }
 
-        
-        internal static void LogExceptionReceivedEvent(ExceptionReceivedEventArgs e, string functionName, ILoggerFactory loggerFactory)
-        {
-            try
-            {
-                var ctxt = e.ExceptionReceivedContext;
-                var logger = loggerFactory?.CreateLogger(LogCategories.CreateFunctionCategory(functionName));
-                string message = $"Message processing error (Action={ctxt.Action}, ClientId={ctxt.ClientId}, EntityPath={ctxt.EntityPath}, Endpoint={ctxt.Endpoint})";
+                return options;
+            }
 
-                var logLevel = GetLogLevel(e.Exception);
-                logger?.Log(logLevel, 0, message, e.Exception, (s, ex) => message);
-            }
-            catch
-            {
-                // best effort logging
-            }
-        }
-
-        private static LogLevel GetLogLevel(Exception ex)
-        {
-            var sbex = ex as ServiceBusException;
-            if (!(ex is OperationCanceledException) && (sbex == null || !sbex.IsTransient))
-            {
-                // any non-transient exceptions or unknown exception types
-                // we want to log as errors
-                return LogLevel.Error;
-            }
-            else
-            {
-                // transient messaging errors we log as info so we have a record
-                // of them, but we don't treat them as actual errors
-                return LogLevel.Information;
-            }
+            return _options;
         }
     }
 }
