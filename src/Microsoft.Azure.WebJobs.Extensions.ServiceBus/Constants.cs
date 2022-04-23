@@ -28,5 +28,6 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
         public const string DefaultConnectionSettingStringName = "AzureWebJobsServiceBus";
         public const string DynamicSku = "Dynamic";
         public const string AzureWebsiteSku = "WEBSITE_SKU";
+        public const string ServiceBusLogsEnabled = "SERVICE_BUS_LOGS_ENABLED";
     }
 }
