@@ -77,7 +77,20 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 
             _details = new Lazy<string>(() =>
             {
-                string endpoint = _isSessionsEnabled ? _clientEntity.ServiceBusConnection.Endpoint.ToString() : _receiver.Value?.ServiceBusConnection.Endpoint.ToString();
+                string endpoint = String.Empty;
+                if (_clientEntity != null)
+                {
+                    endpoint = _clientEntity.ServiceBusConnection.Endpoint.ToString();
+                } 
+                else if (_receiver.IsValueCreated)
+                {
+                    endpoint = _receiver.Value.ServiceBusConnection.Endpoint.ToString();
+                } 
+                else if (_sessionClient.IsValueCreated)
+                {
+                    endpoint = _sessionClient.Value.ServiceBusConnection.Endpoint.ToString();
+                }
+
                 return $"namespace='{endpoint}', enityPath='{_entityPath}', singleDispatch='{_singleDispatch}', " +
                             $"isSessionsEnabled='{_isSessionsEnabled}', functionId='{_functionId}'";
             });
