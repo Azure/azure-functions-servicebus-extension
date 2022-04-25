@@ -2,6 +2,10 @@
 <!-- Please add your release notes in the following format:
 - My change description (#PR)
 -->
+#### Version Version 4.3.1
+- Add listener details (#186)
+- Fix batch receive race condition (#184)
+
 #### Version Version 4.3.0
 - Added support for allowing 'autoComplete' setting at the function level for all the single, batch or session triggers.
 
