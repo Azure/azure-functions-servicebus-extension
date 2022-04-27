@@ -2,6 +2,7 @@
 // Licensed under the MIT License. See License.txt in the project root for license information.
 
 using System;
+using System.Linq;
 using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
@@ -114,6 +115,13 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests.Listeners
             var scaleMonitor2 = _listener.GetMonitor();
 
             Assert.Same(scaleMonitor, scaleMonitor2);
+        }
+
+        [Fact]
+        public void StopAsync_LogListenerDetails()
+        {
+            Assert.ThrowsAsync<InvalidOperationException>(() => _listener.StopAsync(CancellationToken.None));
+            Assert.NotNull(_loggerProvider.GetAllLogMessages().SingleOrDefault(x => x.FormattedMessage.StartsWith("ServiceBus listener stopped")));
         }
 
         Task ExceptionReceivedHandler(ExceptionReceivedEventArgs eventArgs)
