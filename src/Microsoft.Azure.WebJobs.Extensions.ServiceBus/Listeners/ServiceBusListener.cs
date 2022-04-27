@@ -91,7 +91,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
                     endpoint = _sessionClient.Value.ServiceBusConnection.Endpoint.ToString();
                 }
 
-                return $"namespace='{endpoint}', enityPath='{_entityPath}', singleDispatch='{_singleDispatch}', " +
+                return $"namespace='{endpoint}', entityPath='{_entityPath}', singleDispatch='{_singleDispatch}', " +
                             $"isSessionsEnabled='{_isSessionsEnabled}', functionId='{_functionId}'";
             });
         }
