@@ -53,6 +53,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
 
             var bindingData = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
             SafeAddValue(() => bindingData.Add(nameof(value.MessageReceiver), value.MessageReceiver as MessageReceiver));
+            SafeAddValue(() => bindingData.Add("IMessageReceiver", value.MessageReceiver as IMessageReceiver));
             SafeAddValue(() => bindingData.Add("MessageSession", value.MessageReceiver as IMessageSession));
 
             if (value.IsSingleDispatch)
@@ -85,6 +86,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus
             AddBindingContractMember(contract, "UserProperties", typeof(IDictionary<string, object>), isSingleDispatch);
             contract.Add("MessageReceiver", typeof(MessageReceiver));
             contract.Add("MessageSession", typeof(IMessageSession));
+            contract.Add("IMessageReceiver", typeof(IMessageReceiver));
 
             return contract;
         }
