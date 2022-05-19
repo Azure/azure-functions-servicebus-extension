@@ -280,6 +280,19 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
             await TestMultipleDrainMode<DrainModeTestJobTopicBatch>(false);
         }
 
+        [Fact]
+        public async Task BindToIMessageReceiver()
+        {            
+            _eventWait = new ManualResetEvent(initialState: false);
+            using (IHost host = BuildTestHost<BindToIMessageReceiverTestJob>())
+            {
+                await host.StartAsync();
+                await WriteQueueMessage(_primaryConnectionString, FirstQueueName, "Test");
+                bool result = _eventWait.WaitOne(SBTimeoutMills);
+                Assert.True(result);
+            }
+        }
+
         /*
          * Helper functions
          */
@@ -944,6 +957,18 @@ namespace Microsoft.Azure.WebJobs.Host.EndToEndTests
                     await messageReceiver.CompleteAsync(msg.SystemProperties.LockToken);
                 }
                 _drainValidationPostDelay.Set();
+            }
+        }
+
+        public class BindToIMessageReceiverTestJob
+        {
+            public static void BindToIMessageReceiver(
+                            [ServiceBusTrigger(FirstQueueName)] Message message,
+                            IMessageReceiver imessageReceiver, MessageReceiver messageReceiver)
+            {
+                Assert.NotNull(imessageReceiver);
+                Assert.NotNull(messageReceiver);
+                _eventWait.Set();
             }
         }
 
