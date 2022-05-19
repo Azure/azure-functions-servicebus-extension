@@ -38,7 +38,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             var strategy = new ServiceBusTriggerBindingStrategy();
             var bindingDataContract = strategy.GetBindingContract(false);
 
-            Assert.Equal(15, bindingDataContract.Count);
+            Assert.Equal(16, bindingDataContract.Count);
             Assert.Equal(bindingDataContract["DeliveryCountArray"], typeof(int[]));
             Assert.Equal(bindingDataContract["DeadLetterSourceArray"], typeof(string[]));
             Assert.Equal(bindingDataContract["LockTokenArray"], typeof(string[]));
@@ -54,6 +54,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             Assert.Equal(bindingDataContract["UserPropertiesArray"], typeof(IDictionary<string, object>[]));
             Assert.Equal(bindingDataContract["MessageReceiver"], typeof(MessageReceiver));
             Assert.Equal(bindingDataContract["MessageSession"], typeof(IMessageSession));
+            Assert.Equal(bindingDataContract["IMessageReceiver"], typeof(IMessageReceiver));
         }
 
         [Fact]
@@ -71,7 +72,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             var strategy = new ServiceBusTriggerBindingStrategy();
             var bindingData = strategy.GetBindingData(input);
 
-            Assert.Equal(15, bindingData.Count);  // SystemPropertiesCollection is sealed 
+            Assert.Equal(16, bindingData.Count);  // SystemPropertiesCollection is sealed 
 
             Assert.Same(input.MessageReceiver as MessageReceiver, bindingData["MessageReceiver"]);
             Assert.Same(input.MessageReceiver as IMessageSession, bindingData["MessageSession"]);
@@ -114,7 +115,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             var strategy = new ServiceBusTriggerBindingStrategy();
             var bindingData = strategy.GetBindingData(input);
 
-            Assert.Equal(15, bindingData.Count);
+            Assert.Equal(16, bindingData.Count);
             Assert.Same(input.MessageReceiver as MessageReceiver, bindingData["MessageReceiver"]);
             Assert.Same(input.MessageReceiver as IMessageSession, bindingData["MessageSession"]);
 
@@ -154,7 +155,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
 
         private static void CheckBindingContract(Dictionary<string, Type> bindingDataContract)
         {
-            Assert.Equal(15, bindingDataContract.Count);
+            Assert.Equal(16, bindingDataContract.Count);
             Assert.Equal(bindingDataContract["DeliveryCount"], typeof(int));
             Assert.Equal(bindingDataContract["DeadLetterSource"], typeof(string));
             Assert.Equal(bindingDataContract["LockToken"], typeof(string));
@@ -170,6 +171,7 @@ namespace Microsoft.Azure.WebJobs.ServiceBus.UnitTests
             Assert.Equal(bindingDataContract["UserProperties"], typeof(IDictionary<string, object>));
             Assert.Equal(bindingDataContract["MessageReceiver"], typeof(MessageReceiver));
             Assert.Equal(bindingDataContract["MessageSession"], typeof(IMessageSession));
+            Assert.Equal(bindingDataContract["IMessageReceiver"], typeof(IMessageReceiver));
         }
 
         private static SystemPropertiesCollection GetSystemProperties()
