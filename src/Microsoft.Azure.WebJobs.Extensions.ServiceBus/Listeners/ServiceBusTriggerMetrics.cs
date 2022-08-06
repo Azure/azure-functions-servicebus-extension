@@ -8,7 +8,8 @@ using System.Text;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 {
-    internal class ServiceBusTriggerMetrics : ScaleMetrics
+    // TODO this public will be not necessary.
+    public class ServiceBusTriggerMetrics : ScaleMetrics
     {
         /// <summary>
         /// The number of messages currently in the queue/topic.
