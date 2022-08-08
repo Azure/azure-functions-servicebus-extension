@@ -11,7 +11,7 @@ using Microsoft.Azure.WebJobs.Host.Scale;
 
 namespace Microsoft.Azure.WebJobs.ServiceBus.Listeners
 {
-    public class ScaleControllerMonitorFactory : IScaleMonitorFactory
+    public class ScaleControllerMonitorFactory : IScaleMonitorProviderForScaleController
     {
         public IScaleMonitor Create(ScaleMonitorContext context)
         {
