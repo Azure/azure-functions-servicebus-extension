@@ -27,9 +27,9 @@ namespace Microsoft.Azure.WebJobs
     [Binding]
     public sealed class ServiceBusTriggerAttribute : Attribute, IConnectionProvider
     {
-        private readonly string _queueName;
-        private readonly string _topicName;
-        private readonly string _subscriptionName;
+        private string _queueName;
+        private string _topicName;
+        private string _subscriptionName;
         private bool? _autoComplete = null;
 
         /// <summary>
@@ -52,6 +52,11 @@ namespace Microsoft.Azure.WebJobs
             _subscriptionName = subscriptionName;
         }
 
+        // Empty Constructor required for generic operation.
+        public ServiceBusTriggerAttribute()
+        {
+        }
+
         /// <summary>
         /// Gets or sets the app setting name that contains the Service Bus connection string.
         /// </summary>
@@ -63,7 +68,7 @@ namespace Microsoft.Azure.WebJobs
         /// <remarks>When binding to a subscription in a topic, returns <see langword="null"/>.</remarks>
         public string QueueName
         {
-            get { return _queueName; }
+            get { return _queueName; } set { _queueName = value; } 
         }
 
         /// <summary>
