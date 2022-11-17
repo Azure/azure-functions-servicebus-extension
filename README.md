@@ -1,5 +1,5 @@
 ﻿# Service Bus Extension for Azure Functions
-This extension provides functionality for receiving Service Bus messges in Azure Functions, allowing you to easily write functions that respond to any message published to Service Bus.
+This extension provides functionality for receiving Service Bus messages in Azure Functions, allowing you to easily write functions that respond to any message published to Service Bus.
 
 |Branch|Status|
 |---|---|
