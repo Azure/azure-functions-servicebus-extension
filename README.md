@@ -1,4 +1,7 @@
-﻿# Service Bus Extension for Azure Functions
+﻿# Service Bus Extension for Azure Functions [Archived]
+
+This GitHub project has been archived. Ongoing development on this project can be found in https://github.com/Azure/azure-sdk-for-net/tree/main/sdk/servicebus/Microsoft.Azure.WebJobs.Extensions.ServiceBus.
+
 This extension provides functionality for receiving Service Bus messges in Azure Functions, allowing you to easily write functions that respond to any message published to Service Bus.
 
 |Branch|Status|
